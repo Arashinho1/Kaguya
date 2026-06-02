@@ -102,12 +102,14 @@ export class GuildConfigService {
         },
         update: {
           name: attribute.name,
+          description: "description" in attribute ? attribute.description : undefined,
           sortOrder: attribute.sortOrder
         },
         create: {
           guildId: rpgGuild.id,
           key: attribute.key,
           name: attribute.name,
+          description: "description" in attribute ? attribute.description : undefined,
           sortOrder: attribute.sortOrder
         }
       });

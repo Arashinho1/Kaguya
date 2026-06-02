@@ -1,9 +1,15 @@
 import { Message, PermissionsBitField } from "discord.js";
 
-export function canManageGuild(message: Message<true>): boolean {
+export function hasManageGuildPermission(
+  permissions: Readonly<PermissionsBitField> | null | undefined
+): boolean {
   return (
-    message.member?.permissions.has(PermissionsBitField.Flags.Administrator) ||
-    message.member?.permissions.has(PermissionsBitField.Flags.ManageGuild) ||
+    permissions?.has(PermissionsBitField.Flags.Administrator) ||
+    permissions?.has(PermissionsBitField.Flags.ManageGuild) ||
     false
   );
+}
+
+export function canManageGuild(message: Message<true>): boolean {
+  return hasManageGuildPermission(message.member?.permissions);
 }

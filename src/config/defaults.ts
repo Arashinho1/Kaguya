@@ -1,5 +1,12 @@
 export const DEFAULT_PREFIX = ".";
 
+export const DEFAULT_CHAKRA_FORMULA = {
+  sourceAttributeKeys: ["forca", "velocidade", "resistencia"],
+  sourceMultiplier: 1,
+  isolatedMultiplier: 1,
+  directBonus: 0
+} as const;
+
 export const DEFAULT_GUILD_SETTINGS = [
   {
     key: "logChannelId",
@@ -16,17 +23,32 @@ export const DEFAULT_GUILD_SETTINGS = [
     value: false,
     valueType: "BOOLEAN",
     isPublic: false
+  },
+  {
+    key: "chakraFormula",
+    label: "Formula de Chakra",
+    description: "Define como o Chakra derivado e calculado a partir dos atributos base.",
+    value: DEFAULT_CHAKRA_FORMULA,
+    valueType: "JSON",
+    isPublic: true
   }
 ] as const;
 
 export const DEFAULT_ATTRIBUTES = [
-  { key: "ninjutsu", name: "Ninjutsu", sortOrder: 10 },
-  { key: "taijutsu", name: "Taijutsu", sortOrder: 20 },
-  { key: "genjutsu", name: "Genjutsu", sortOrder: 30 },
-  { key: "chakra", name: "Chakra", sortOrder: 40 },
-  { key: "stamina", name: "Stamina", sortOrder: 50 },
-  { key: "velocidade", name: "Velocidade", sortOrder: 60 },
-  { key: "inteligencia", name: "Inteligencia", sortOrder: 70 }
+  { key: "forca", name: "Forca", sortOrder: 10 },
+  { key: "velocidade", name: "Velocidade", sortOrder: 20 },
+  { key: "resistencia", name: "Resistencia", sortOrder: 30 },
+  {
+    key: "chakra",
+    name: "Chakra",
+    description: "Valor derivado pela formula de chakra do servidor.",
+    sortOrder: 40
+  },
+  { key: "ninjutsu", name: "Ninjutsu", sortOrder: 50 },
+  { key: "taijutsu", name: "Taijutsu", sortOrder: 60 },
+  { key: "genjutsu", name: "Genjutsu", sortOrder: 70 },
+  { key: "stamina", name: "Stamina", sortOrder: 80 },
+  { key: "inteligencia", name: "Inteligencia", sortOrder: 90 }
 ] as const;
 
 export const DEFAULT_RANKS = [

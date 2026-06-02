@@ -2,7 +2,9 @@ import { Client, GatewayIntentBits, Partials } from "discord.js";
 
 import { env } from "./config/env.js";
 import { prisma, closeDatabase } from "./database/prisma.js";
+import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
+import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 
 const client = new Client({
@@ -14,8 +16,11 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
+const guildConfig = new GuildConfigService(prisma);
+
 const services = {
-  guildConfig: new GuildConfigService(prisma)
+  guildConfig,
+  attributes: new AttributeService(prisma, guildConfig)
 };
 
 client.once("ready", (readyClient) => {
@@ -24,6 +29,10 @@ client.once("ready", (readyClient) => {
 
 client.on("messageCreate", (message) => {
   void handleMessageCreate(message, services);
+});
+
+client.on("interactionCreate", (interaction) => {
+  void handleInteractionCreate(interaction, services);
 });
 
 async function shutdown(signal: string): Promise<void> {
