@@ -1,5 +1,6 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
 
+import { buildConfigPanel } from "../../modules/config-panel/ConfigPanel.js";
 import { sendStaffLog } from "../../services/staffLog.js";
 import type { PrefixCommand } from "../../types/command.js";
 
@@ -18,32 +19,12 @@ export const configCommand: PrefixCommand = {
   aliases: ["cfg"],
   staffOnly: true,
   description: "Mostra e altera configuracoes do RPG neste servidor.",
-  usage: ".config | .config prefix . | .config log #canal",
+  usage: ".config",
   async execute({ message, args, prefix, services }) {
     const subcommand = args.shift()?.toLowerCase();
 
     if (!subcommand || ["ver", "listar", "painel"].includes(subcommand)) {
-      const overview = await services.guildConfig.getGuildOverview(message.guild);
-
-      await message.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x2b6cb0)
-            .setTitle("Painel de configuracao")
-            .setDescription("Este servidor ja esta isolado no banco. Cada regra futura sera salva por servidor.")
-            .addFields(
-              { name: "Prefixo", value: `\`${overview.prefix}\``, inline: true },
-              { name: "Configuracoes", value: String(overview.settingsCount), inline: true },
-              { name: "Atributos", value: String(overview.attributesCount), inline: true },
-              { name: "Ranks", value: String(overview.ranksCount), inline: true },
-              { name: "Tipos de jutsu", value: String(overview.jutsuTypesCount), inline: true },
-              {
-                name: "Comandos uteis",
-                value: `\`${prefix}setup\`\n\`${prefix}config prefix .\`\n\`${prefix}config log #canal\``
-              }
-            )
-        ]
-      });
+      await message.reply(await buildConfigPanel(services, message.guild, prefix));
       return;
     }
 

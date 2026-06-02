@@ -31,6 +31,18 @@ Um modulo so e considerado completo quando tiver:
 - registro em `AuditLog`;
 - mensagens claras no Discord.
 
+## Padrao de comandos
+
+Comandos futuros devem seguir este padrao:
+
+- Se o comando tiver uma unica leitura simples, pode ser direto. Exemplos: `.ping`, `.chakra`.
+- Se o comando tiver mais de uma aplicacao, ele deve abrir um menu principal com embed e componentes.
+- O menu principal deve ser a porta oficial; subcomandos por texto podem existir apenas como atalhos tecnicos.
+- Configuracoes devem usar modais, selects e botoes em vez de exigir que a staff memorize sintaxe.
+- Cada embed deve ter uma descricao curta, tecnica o suficiente para orientar a staff, mas escrita para usuario final.
+- Toda funcao que pode variar por servidor deve salvar dados por servidor e aparecer no guia quando ficar publica.
+- Ao criar ou alterar comando, atualizar `.guia` e este documento no mesmo passo.
+
 ## Prefixo
 
 O prefixo inicial e `.`. Ele tambem fica salvo por servidor para permitir ajuste futuro sem mexer no codigo.
@@ -51,6 +63,18 @@ Comandos atuais:
 Esse modulo e a base para ficha, treino, clas, jutsus e combate.
 
 O comando `.atributo` sem argumentos abre um painel com embed, botoes e modais para staff configurar sem decorar comandos longos.
+
+## Modulo de configuracao
+
+O comando `.config` abre um painel com lista suspensa para configuracoes tecnicas do servidor.
+
+Funcoes atuais:
+
+- ver resumo de configuracao;
+- alterar prefixo por modal;
+- configurar canal de logs por modal.
+
+Atalhos de texto existem para manutencao (`.config prefix .`, `.config log #canal`), mas o uso oficial e pelo painel.
 
 ## Chakra derivado
 
@@ -74,3 +98,33 @@ Comandos:
 - `.chakra`: mostra a formula publica;
 - `.atributo chakra`: mostra a configuracao para staff;
 - `.atributo chakra forca,velocidade,resistencia | 1 | 0 | 1`: altera atributos, multiplicador da soma, bonus direto e multiplicador isolado.
+
+## Modulo de ficha
+
+O comando `.ficha` e menu-first. Se o jogador ainda nao tiver ficha, o bot mostra um painel com botao para criar. A criacao acontece por modal.
+
+A ficha inicial salva:
+
+- nome do personagem;
+- conceito curto;
+- imagem por URL;
+- snapshot dos atributos ativos do servidor;
+- Chakra derivado pela formula configurada.
+
+Comandos atuais:
+
+- `.ficha`: mostra sua ficha ou abre o painel de criacao;
+- `.ficha @jogador`: mostra a ficha ativa de outro jogador;
+- `.personagem` / `.perfil`: aliases publicos.
+
+## Guia de comandos
+
+O comando `.guia` abre um painel de ajuda com lista suspensa por categoria.
+
+Aliases:
+
+- `.ajuda`
+- `.help`
+- `.comandos`
+
+O guia mostra comandos de jogador e staff com descricoes curtas. Sempre que novos comandos forem criados, o guia deve ser atualizado no mesmo passo.

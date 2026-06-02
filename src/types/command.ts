@@ -1,10 +1,12 @@
 import type { Message } from "discord.js";
 
 import type { AttributeService } from "../modules/attributes/AttributeService.js";
+import type { CharacterService } from "../modules/characters/CharacterService.js";
 import type { GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
 
 export interface CommandServices {
   attributes: AttributeService;
+  characters: CharacterService;
   guildConfig: GuildConfigService;
 }
 
