@@ -22,7 +22,7 @@ interface HelpCommandEntry {
 const PLAYER_COMMANDS: HelpCommandEntry[] = [
   {
     command: "ficha",
-    description: "Painel da ficha: mostra, cria por modal, edita e recalcula atributos/Chakra.",
+    description: "Painel da ficha: cria, edita conceito/imagem, vínculos, status e atributos/Chakra.",
     aliases: "personagem, perfil"
   },
   {
@@ -53,7 +53,7 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "config",
-    description: "Painel técnico do servidor: prefixo, logs, permissões por cargo e resumo.",
+    description: "Painel técnico do servidor: prefixo, logs, permissões, módulos e Mundo RPG.",
     aliases: "cfg"
   },
   {

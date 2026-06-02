@@ -11,6 +11,7 @@ export const attributesCommand: PrefixCommand = {
   name: "atributos",
   aliases: ["attrs"],
   access: "member",
+  module: "attributes",
   description: "Mostra os atributos configurados neste RPG.",
   usage: ".atributos",
   async execute({ message, services, prefix }) {

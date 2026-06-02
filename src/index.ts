@@ -7,6 +7,7 @@ import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
+import { WorldConfigService } from "./modules/world/WorldConfigService.js";
 
 const client = new Client({
   intents: [
@@ -19,11 +20,13 @@ const client = new Client({
 
 const guildConfig = new GuildConfigService(prisma);
 const attributes = new AttributeService(prisma, guildConfig);
+const world = new WorldConfigService(prisma, guildConfig);
 
 const services = {
   guildConfig,
   attributes,
-  characters: new CharacterService(prisma, guildConfig, attributes)
+  characters: new CharacterService(prisma, guildConfig, attributes),
+  world
 };
 
 client.once(Events.ClientReady, (readyClient) => {

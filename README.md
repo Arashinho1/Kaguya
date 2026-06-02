@@ -31,6 +31,16 @@ Toda feature nova deve entregar:
 
 O prefixo padrão é `.`.
 
+## Comandos principais
+
+- `.guia`: abre o menu de ajuda por categoria.
+- `.config`: painel da staff para prefixo, logs, permissões, módulos e Mundo RPG.
+- `.setup`: cria ou atualiza defaults do servidor, como atributos, ranks e tipos de jutsu.
+- `.ficha`: painel de personagem do jogador.
+- `.atributo`: painel da staff para atributos e fórmula de Chakra.
+
+O painel `Mundo RPG`, dentro do `.config`, gerencia clãs, vilas e ranks por servidor. Esses dados alimentam os vínculos da ficha.
+
 ## Permissões do bot
 
 Ative o intent de conteúdo de mensagens no portal do Discord, pois o bot usa comandos por prefixo.

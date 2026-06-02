@@ -14,7 +14,7 @@ import {
   type User
 } from "discord.js";
 
-import type { Character } from "../../generated/prisma/client.js";
+import type { CharacterWithRelations } from "./CharacterService.js";
 import type { CommandServices } from "../../types/command.js";
 
 const CUSTOM_ID_PREFIX = "kaguya:characters";
@@ -28,6 +28,23 @@ export async function buildCharacterPanel(
   const character = await services.characters.findDisplayCharacter(guild, target);
 
   if (!character) {
+    const inactiveCharacter =
+      target.id === viewer.id ? await services.characters.findLatestByUser(guild, target.id) : null;
+
+    if (inactiveCharacter && !inactiveCharacter.isActive) {
+      return {
+        embeds: [renderCharacterEmbed(services, target, inactiveCharacter)],
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`${CUSTOM_ID_PREFIX}:reactivate`)
+              .setLabel("Reativar ficha")
+              .setStyle(ButtonStyle.Primary)
+          )
+        ]
+      };
+    }
+
     return {
       embeds: [
         new EmbedBuilder()
@@ -66,7 +83,11 @@ export async function buildCharacterPanel(
               new ButtonBuilder()
                 .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
                 .setLabel("Recalcular atributos")
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
+                .setLabel("Desativar ficha")
+                .setStyle(ButtonStyle.Danger)
             )
           ]
         : []
@@ -90,6 +111,11 @@ export async function handleCharacterInteraction(
     return true;
   }
 
+  if (!(await services.guildConfig.isModuleEnabled(interaction.guild, "characters"))) {
+    await replyPrivately(interaction, "O módulo **Fichas** está desativado neste servidor.");
+    return true;
+  }
+
   if (interaction.isButton()) {
     await handleCharacterButton(interaction, services);
     return true;
@@ -102,7 +128,7 @@ export async function handleCharacterInteraction(
 function renderCharacterEmbed(
   services: CommandServices,
   user: User,
-  character: Character
+  character: CharacterWithRelations
 ): EmbedBuilder {
   const metadata = services.characters.getMetadata(character);
   const attributes = services.characters.getAttributeValues(character);
@@ -115,10 +141,21 @@ function renderCharacterEmbed(
     .setAuthor({ name: user.displayName, iconURL: user.displayAvatarURL() })
     .setTitle(character.name)
     .setDescription(metadata.concept ?? "Sem conceito definido.")
-    .addFields({
-      name: "Atributos",
-      value: attributeLines.length > 0 ? attributeLines.join("\n") : "Nenhum atributo salvo."
-    })
+    .addFields(
+      {
+        name: "Identidade",
+        value: [
+          `Status: **${character.isActive ? "Ativa" : "Inativa"}**`,
+          `Clã: **${character.clan?.name ?? "Não definido"}**`,
+          `Vila: **${character.village?.name ?? "Não definida"}**`,
+          `Rank: **${character.rank?.name ?? "Não definido"}**`
+        ].join("\n")
+      },
+      {
+        name: "Atributos",
+        value: attributeLines.length > 0 ? attributeLines.join("\n") : "Nenhum atributo salvo."
+      }
+    )
     .setFooter({ text: `Dono: ${user.id}` })
     .setTimestamp(character.updatedAt);
 
@@ -165,6 +202,28 @@ async function handleCharacterButton(
     return;
   }
 
+  if (action === "reactivate") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const updated = await services.characters.setCharacterActive(interaction.guild, interaction.user, true);
+
+    if (!updated) {
+      await interaction.editReply("Não encontrei uma ficha para reativar.");
+      return;
+    }
+
+    await interaction.editReply({
+      content: "Ficha reativada.",
+      embeds: [renderCharacterEmbed(services, interaction.user, updated)]
+    });
+    return;
+  }
+
+  if (action === "deactivate") {
+    await interaction.showModal(buildDeactivateCharacterModal());
+    return;
+  }
+
   if (action === "refreshAttributes") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -194,7 +253,7 @@ async function handleCharacterModal(
 ): Promise<void> {
   const action = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:modal:`.length);
 
-  if (!["create", "edit"].includes(action)) {
+  if (!["create", "edit", "deactivate"].includes(action)) {
     await interaction.reply({
       content: "Modal desconhecido.",
       flags: MessageFlags.Ephemeral
@@ -204,12 +263,41 @@ async function handleCharacterModal(
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+  if (action === "deactivate") {
+    const confirmation = interaction.fields.getTextInputValue("confirmation").trim().toLowerCase();
+
+    if (confirmation !== "desativar") {
+      await interaction.editReply("Escreva `desativar` para confirmar.");
+      return;
+    }
+
+    const updated = await services.characters.setCharacterActive(interaction.guild, interaction.user, false);
+
+    if (!updated) {
+      await interaction.editReply("Você ainda não tem uma ficha ativa neste servidor.");
+      return;
+    }
+
+    await interaction.editReply({
+      content: "Ficha desativada.",
+      embeds: [renderCharacterEmbed(services, interaction.user, updated)]
+    });
+    return;
+  }
+
   if (action === "edit") {
     const name = optionalText(interaction.fields.getTextInputValue("name"));
     const conceptValue = interaction.fields.getTextInputValue("concept").trim();
     const imageUrlValue = interaction.fields.getTextInputValue("imageUrl").trim();
     const concept = conceptValue.length === 0 ? undefined : clearableText(conceptValue);
     const imageUrl = imageUrlValue.length === 0 ? undefined : clearableText(imageUrlValue);
+    const clan = parseClearableOptional(interaction.fields.getTextInputValue("clan"));
+    const links = await resolveLinksFromFields(
+      services,
+      interaction,
+      clan,
+      interaction.fields.getTextInputValue("villageRank")
+    );
 
     if (name && (name.length < 2 || name.length > 80)) {
       await interaction.editReply("O nome da ficha precisa ter entre 2 e 80 caracteres.");
@@ -222,14 +310,24 @@ async function handleCharacterModal(
     }
 
     if (!name && concept === undefined && imageUrl === undefined) {
-      await interaction.editReply("Preencha pelo menos um campo para editar.");
+      if (!links.hasInput) {
+        await interaction.editReply("Preencha pelo menos um campo para editar.");
+        return;
+      }
+    }
+
+    if (links.errors.length > 0) {
+      await interaction.editReply(links.errors.join("\n"));
       return;
     }
 
     const updated = await services.characters.updateCharacterDetails(interaction.guild, interaction.user, {
       name,
       concept,
-      imageUrl
+      imageUrl,
+      clanId: links.clanId,
+      villageId: links.villageId,
+      rankId: links.rankId
     });
 
     if (!updated) {
@@ -254,6 +352,12 @@ async function handleCharacterModal(
   const name = interaction.fields.getTextInputValue("name").trim();
   const concept = optionalText(interaction.fields.getTextInputValue("concept"));
   const imageUrl = optionalText(interaction.fields.getTextInputValue("imageUrl"));
+  const links = await resolveLinksFromFields(
+    services,
+    interaction,
+    parseClearableOptional(interaction.fields.getTextInputValue("clan")),
+    interaction.fields.getTextInputValue("villageRank")
+  );
 
   if (name.length < 2 || name.length > 80) {
     await interaction.editReply("O nome da ficha precisa ter entre 2 e 80 caracteres.");
@@ -265,10 +369,18 @@ async function handleCharacterModal(
     return;
   }
 
+  if (links.errors.length > 0) {
+    await interaction.editReply(links.errors.join("\n"));
+    return;
+  }
+
   const created = await services.characters.createCharacter(interaction.guild, interaction.user, {
     name,
     concept,
-    imageUrl
+    imageUrl,
+    clanId: links.clanId,
+    villageId: links.villageId,
+    rankId: links.rankId
   });
 
   await interaction.editReply({
@@ -290,12 +402,15 @@ function buildCreateCharacterModal(): ModalBuilder {
         TextInputStyle.Paragraph,
         false
       ),
-      textInputRow("imageUrl", "URL da imagem", "https://...", TextInputStyle.Short, false)
+      textInputRow("imageUrl", "URL da imagem", "https://...", TextInputStyle.Short, false),
+      textInputRow("clan", "Clã", "Uchiha", TextInputStyle.Short, false),
+      textInputRow("villageRank", "Vila | Rank", "Konoha | genin", TextInputStyle.Short, false)
     );
 }
 
-function buildEditCharacterModal(services: CommandServices, character: Character): ModalBuilder {
+function buildEditCharacterModal(services: CommandServices, character: CharacterWithRelations): ModalBuilder {
   const metadata = services.characters.getMetadata(character);
+  const villageRankValue = formatVillageRankValue(character);
 
   return new ModalBuilder()
     .setCustomId(`${CUSTOM_ID_PREFIX}:modal:edit`)
@@ -324,7 +439,32 @@ function buildEditCharacterModal(services: CommandServices, character: Character
         TextInputStyle.Short,
         false,
         metadata.imageUrl
+      ),
+      textInputRow(
+        "clan",
+        "Clã (- para limpar)",
+        "Uchiha",
+        TextInputStyle.Short,
+        false,
+        character.clan?.name
+      ),
+      textInputRow(
+        "villageRank",
+        "Vila | Rank (- limpa)",
+        "Konoha | genin",
+        TextInputStyle.Short,
+        false,
+        villageRankValue
       )
+    );
+}
+
+function buildDeactivateCharacterModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:deactivate`)
+    .setTitle("Desativar ficha")
+    .addComponents(
+      textInputRow("confirmation", "Confirmação", "desativar", TextInputStyle.Short, true)
     );
 }
 
@@ -357,6 +497,59 @@ function optionalText(value: string): string | undefined {
 
 function clearableText(value: string): string | null {
   return ["-", "limpar", "null"].includes(value.toLowerCase()) ? null : value;
+}
+
+function parseClearableOptional(value: string): string | null | undefined {
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  return clearableText(trimmed);
+}
+
+async function resolveLinksFromFields(
+  services: CommandServices,
+  interaction: ModalSubmitInteraction<"cached">,
+  clan: string | null | undefined,
+  villageRankRaw: string
+) {
+  const villageRank = parseVillageRank(villageRankRaw);
+  const hasInput = clan !== undefined || villageRank.village !== undefined || villageRank.rank !== undefined;
+  const resolved = await services.characters.resolveCharacterLinks(interaction.guild, {
+    clan,
+    village: villageRank.village,
+    rank: villageRank.rank
+  });
+
+  return {
+    ...resolved,
+    hasInput
+  };
+}
+
+function parseVillageRank(value: string): { village?: string | null; rank?: string | null } {
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return {};
+  }
+
+  const [villageRaw, rankRaw] = trimmed.split("|").map((part) => parseClearableOptional(part ?? ""));
+
+  return {
+    village: villageRaw,
+    rank: rankRaw
+  };
+}
+
+function formatVillageRankValue(character: CharacterWithRelations): string | undefined {
+  if (!character.village && !character.rank) {
+    return undefined;
+  }
+
+  return `${character.village?.name ?? ""} | ${character.rank?.key ?? character.rank?.name ?? ""}`;
 }
 
 function isValidHttpUrl(value: string): boolean {

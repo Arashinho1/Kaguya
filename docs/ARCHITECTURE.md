@@ -81,14 +81,32 @@ Funções atuais:
 - configurar log administrativo por modal;
 - configurar log de comandos por modal.
 - configurar cargos com permissão administrativa pelo painel.
+- ativar ou desativar módulos do bot por servidor.
+- gerenciar dados do Mundo RPG: clãs, vilas e ranks.
 
 O log administrativo registra funções relacionadas à configuração do bot no servidor. O log de comandos registra comandos executados por usuários naquele servidor.
 
 Permissões administrativas usam `GuildRolePermission` com a permissão `command.admin`. Administrador e Gerenciar Servidor continuam liberados por padrão, e cargos configurados também passam a usar comandos `access: "admin"`.
 
-Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`, `.config log-comandos #canal`, `.config permissao adicionar @cargo`), mas o uso oficial é pelo painel.
+Módulos usam `GuildSetting.enabledModules`. Comandos associados a um módulo desativado não executam até que a staff reative o módulo pelo `.config`.
+
+Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`, `.config log-comandos #canal`, `.config permissao adicionar @cargo`, `.config modulo desativar attributes`), mas o uso oficial é pelo painel.
 
 O comando `.servidores` lista todos os servidores em que o bot está. Por ser uma informação global da aplicação, ele é restrito ao dono do bot ou aos IDs definidos em `BOT_OWNER_IDS`.
+
+## Mundo RPG
+
+O painel `.config` tem uma página `Mundo RPG` para dados narrativos que variam por servidor.
+
+Dados atuais:
+
+- `Clan`: clãs vinculáveis à ficha. Suporta nome, descrição, limite de membros, bônus em JSON, restrições em JSON e status ativo/inativo.
+- `Village`: vilas vinculáveis à ficha. Suporta nome, descrição, metadados em JSON e status ativo/inativo.
+- `RankDefinition`: ranks vinculáveis à ficha. Suporta chave técnica, nome, descrição, ordem, metadados em JSON e status ativo/inativo.
+
+O uso oficial é pelo painel com lista suspensa e modais. A ficha só aceita vínculos com registros ativos do servidor.
+
+Esses dados são parte do esqueleto configurável do RPG. Bônus, restrições e metadados ainda não aplicam efeitos automáticos por conta própria; eles ficam persistidos para módulos futuros consumirem de forma padronizada.
 
 ## Chakra derivado
 
@@ -117,13 +135,19 @@ Comandos:
 
 O comando `.ficha` é menu-first. Se o jogador ainda não tiver ficha, o bot mostra um painel com botão para criar. A criação acontece por modal.
 
-A ficha inicial salva:
+A ficha salva:
 
 - nome do personagem;
 - conceito curto;
 - imagem por URL;
+- vínculo com clã;
+- vínculo com vila;
+- vínculo com rank;
 - snapshot dos atributos ativos do servidor;
-- Chakra derivado pela fórmula configurada.
+- Chakra derivado pela fórmula configurada;
+- status ativo/inativo.
+
+Clã, vila e rank são vínculos reais com `Clan`, `Village` e `RankDefinition`. O jogador pode editar os vínculos pelo modal da ficha usando nome, chave ou ID quando aplicável. Uma ficha inativa pode ser reativada pelo painel do próprio jogador.
 
 Comandos atuais:
 

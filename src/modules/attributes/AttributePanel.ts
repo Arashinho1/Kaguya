@@ -128,6 +128,11 @@ export async function handleAttributeInteraction(
     return true;
   }
 
+  if (!(await services.guildConfig.isModuleEnabled(interaction.guild, "attributes"))) {
+    await replyPrivately(interaction, "O módulo **Atributos e Chakra** está desativado neste servidor.");
+    return true;
+  }
+
   if (interaction.isButton()) {
     await handleAttributeButton(interaction, services);
     return true;

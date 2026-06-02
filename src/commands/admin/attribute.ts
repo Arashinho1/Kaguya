@@ -32,6 +32,7 @@ export const attributeCommand: PrefixCommand = {
   name: "atributo",
   aliases: ["attr"],
   access: "admin",
+  module: "attributes",
   description: "Configura atributos do RPG neste servidor.",
   usage: ".atributo | .atributo criar forca | Força | 0 | 0 | 100",
   async execute({ message, args, prefix, services }) {

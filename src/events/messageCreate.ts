@@ -1,6 +1,6 @@
 import type { Message } from "discord.js";
 
-import { DEFAULT_PREFIX } from "../config/defaults.js";
+import { DEFAULT_MODULES, DEFAULT_PREFIX } from "../config/defaults.js";
 import { commands } from "../commands/index.js";
 import { sendCommandUsageLog } from "../services/commandUsageLog.js";
 import { canUseCommandAccess } from "../services/permissions.js";
@@ -40,6 +40,13 @@ export async function handleMessageCreate(
     return;
   }
 
+  if (command.module && !(await services.guildConfig.isModuleEnabled(message.guild, command.module))) {
+    await message.reply(
+      `O módulo **${getModuleName(command.module)}** está desativado neste servidor. A staff pode reativar em \`${prefix}config\`.`
+    );
+    return;
+  }
+
   try {
     await command.execute({
       message,
@@ -67,4 +74,8 @@ function getAccessDeniedMessage(access: "owner" | "admin" | "member"): string {
   }
 
   return "Você não tem permissão para usar esse comando.";
+}
+
+function getModuleName(moduleKey: string): string {
+  return DEFAULT_MODULES.find((module) => module.key === moduleKey)?.name ?? moduleKey;
 }

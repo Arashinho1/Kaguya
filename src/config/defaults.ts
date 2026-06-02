@@ -7,6 +7,34 @@ export const DEFAULT_CHAKRA_FORMULA = {
   directBonus: 0
 } as const;
 
+export const DEFAULT_MODULE_STATUS = {
+  characters: true,
+  attributes: true
+} as const;
+
+export type GuildModuleKey = keyof typeof DEFAULT_MODULE_STATUS;
+
+export const DEFAULT_MODULES: Array<{
+  key: GuildModuleKey;
+  name: string;
+  description: string;
+}> = [
+  {
+    key: "characters",
+    name: "Fichas",
+    description: "Personagens, perfil público e criação/edição de ficha."
+  },
+  {
+    key: "attributes",
+    name: "Atributos e Chakra",
+    description: "Atributos configuráveis, fórmula de Chakra e painel de atributos."
+  }
+];
+
+export function isGuildModuleKey(value: string): value is GuildModuleKey {
+  return value in DEFAULT_MODULE_STATUS;
+}
+
 export const DEFAULT_GUILD_SETTINGS = [
   {
     key: "logChannelId",
@@ -30,6 +58,14 @@ export const DEFAULT_GUILD_SETTINGS = [
     description: "Define se um jogador pode ter mais de um personagem ativo.",
     value: false,
     valueType: "BOOLEAN",
+    isPublic: false
+  },
+  {
+    key: "enabledModules",
+    label: "Módulos ativos",
+    description: "Define quais módulos do bot estão ativos neste servidor.",
+    value: DEFAULT_MODULE_STATUS,
+    valueType: "JSON",
     isPublic: false
   },
   {

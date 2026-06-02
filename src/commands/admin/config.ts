@@ -1,5 +1,6 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
 
+import { DEFAULT_MODULES, isGuildModuleKey } from "../../config/defaults.js";
 import { buildConfigPanel } from "../../modules/config-panel/ConfigPanel.js";
 import { ADMIN_COMMAND_PERMISSION } from "../../modules/guild-config/GuildConfigService.js";
 import { sendStaffLog } from "../../services/staffLog.js";
@@ -20,12 +21,26 @@ function parseRoleId(value: string | undefined): string | null {
   return /^\d{15,25}$/.test(roleId) ? roleId : null;
 }
 
+function normalizeModuleAlias(value: string): "characters" | "attributes" | null {
+  const key = value.trim().toLowerCase();
+
+  if (["ficha", "fichas", "personagem", "personagens"].includes(key)) {
+    return "characters";
+  }
+
+  if (["atributo", "atributos", "chakra"].includes(key)) {
+    return "attributes";
+  }
+
+  return isGuildModuleKey(key) ? key : null;
+}
+
 export const configCommand: PrefixCommand = {
   name: "config",
   aliases: ["cfg"],
   access: "admin",
   description: "Mostra e altera configurações do RPG neste servidor.",
-  usage: ".config | .config log #canal | .config log-comandos #canal | .config permissao adicionar @cargo",
+  usage: ".config | .config log #canal | .config permissao adicionar @cargo | .config modulo ativar ficha",
   async execute({ message, args, prefix, services }) {
     const subcommand = args.shift()?.toLowerCase();
 
@@ -168,6 +183,66 @@ export const configCommand: PrefixCommand = {
       }
 
       await message.reply(`Use \`${prefix}config permissao listar\`, \`${prefix}config permissao adicionar @cargo\` ou \`${prefix}config permissao remover @cargo\`.`);
+      return;
+    }
+
+    if (["modulo", "módulo", "modulos", "módulos"].includes(subcommand)) {
+      const action = args.shift()?.toLowerCase();
+
+      if (!action || ["listar", "lista", "ver"].includes(action)) {
+        const moduleStatus = await services.guildConfig.getModuleStatus(message.guild);
+
+        await message.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x2b6cb0)
+              .setTitle("Módulos do servidor")
+              .setDescription(
+                DEFAULT_MODULES.map((module) =>
+                  [
+                    `**${module.name}** \`[${module.key}]\``,
+                    `Status: **${moduleStatus[module.key] ? "Ativo" : "Inativo"}**`,
+                    module.description
+                  ].join("\n")
+                ).join("\n\n")
+              )
+          ]
+        });
+        return;
+      }
+
+      const moduleKey = normalizeModuleAlias(args[0] ?? "");
+
+      if (!moduleKey) {
+        await message.reply(
+          `Use \`${prefix}config modulo ativar chave\` ou \`${prefix}config modulo desativar chave\`. Módulos: ${DEFAULT_MODULES.map((module) => `\`${module.key}\``).join(", ")}.`
+        );
+        return;
+      }
+
+      if (["ativar", "on", "enable"].includes(action)) {
+        const module = DEFAULT_MODULES.find((entry) => entry.key === moduleKey);
+        await services.guildConfig.setModuleEnabled(message.guild, message.author.id, moduleKey, true);
+        await sendStaffLog(message, services, {
+          title: "Módulo ativado",
+          description: `O módulo **${module?.name ?? moduleKey}** foi ativado.`
+        });
+        await message.reply(`Módulo **${module?.name ?? moduleKey}** ativado.`);
+        return;
+      }
+
+      if (["desativar", "off", "disable"].includes(action)) {
+        const module = DEFAULT_MODULES.find((entry) => entry.key === moduleKey);
+        await services.guildConfig.setModuleEnabled(message.guild, message.author.id, moduleKey, false);
+        await sendStaffLog(message, services, {
+          title: "Módulo desativado",
+          description: `O módulo **${module?.name ?? moduleKey}** foi desativado.`
+        });
+        await message.reply(`Módulo **${module?.name ?? moduleKey}** desativado.`);
+        return;
+      }
+
+      await message.reply(`Use \`${prefix}config modulo listar\`, \`${prefix}config modulo ativar chave\` ou \`${prefix}config modulo desativar chave\`.`);
       return;
     }
 

@@ -4,12 +4,16 @@ import {
   DEFAULT_ATTRIBUTES,
   DEFAULT_GUILD_SETTINGS,
   DEFAULT_JUTSU_TYPES,
+  DEFAULT_MODULE_STATUS,
   DEFAULT_PREFIX,
-  DEFAULT_RANKS
+  DEFAULT_RANKS,
+  type GuildModuleKey
 } from "../../config/defaults.js";
 import { Prisma, type PrismaClient, type RpgGuild } from "../../generated/prisma/client.js";
 
 export const ADMIN_COMMAND_PERMISSION = "command.admin";
+
+type ModuleStatus = Record<GuildModuleKey, boolean>;
 
 export class GuildConfigService {
   private readonly prefixCache = new Map<string, string>();
@@ -178,23 +182,72 @@ export class GuildConfigService {
     attributesCount: number;
     ranksCount: number;
     jutsuTypesCount: number;
+    activeModulesCount: number;
+    modulesCount: number;
   }> {
     const rpgGuild = await this.ensureGuild(guild);
 
-    const [settingsCount, attributesCount, ranksCount, jutsuTypesCount] = await Promise.all([
+    const [settingsCount, attributesCount, ranksCount, jutsuTypesCount, moduleStatus] = await Promise.all([
       this.prisma.guildSetting.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.attributeDefinition.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id } })
+      this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id } }),
+      this.getModuleStatus(guild)
     ]);
+    const modules = Object.values(moduleStatus);
 
     return {
       prefix: rpgGuild.prefix,
       settingsCount,
       attributesCount,
       ranksCount,
-      jutsuTypesCount
+      jutsuTypesCount,
+      activeModulesCount: modules.filter(Boolean).length,
+      modulesCount: modules.length
     };
+  }
+
+  public async getModuleStatus(guild: Guild): Promise<ModuleStatus> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const setting = await this.prisma.guildSetting.findUnique({
+      where: {
+        guildId_key: {
+          guildId: rpgGuild.id,
+          key: "enabledModules"
+        }
+      }
+    });
+
+    return normalizeModuleStatus(setting?.value);
+  }
+
+  public async isModuleEnabled(guild: Guild, moduleKey: GuildModuleKey): Promise<boolean> {
+    const status = await this.getModuleStatus(guild);
+    return status[moduleKey];
+  }
+
+  public async setModuleEnabled(
+    guild: Guild,
+    actorId: string,
+    moduleKey: GuildModuleKey,
+    enabled: boolean
+  ): Promise<ModuleStatus> {
+    const current = await this.getModuleStatus(guild);
+    const next: ModuleStatus = {
+      ...current,
+      [moduleKey]: enabled
+    };
+
+    await this.setSetting(guild, actorId, {
+      key: "enabledModules",
+      label: "Módulos ativos",
+      description: "Define quais módulos do bot estão ativos neste servidor.",
+      value: next as unknown as Prisma.InputJsonValue,
+      valueType: "JSON",
+      isPublic: false
+    });
+
+    return next;
   }
 
   public async setLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
@@ -436,4 +489,20 @@ export class GuildConfigService {
       }
     });
   }
+}
+
+function normalizeModuleStatus(value: unknown): ModuleStatus {
+  const fallback = { ...DEFAULT_MODULE_STATUS };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(fallback).map(([key, defaultValue]) => [
+      key,
+      typeof record[key] === "boolean" ? record[key] : defaultValue
+    ])
+  ) as ModuleStatus;
 }
