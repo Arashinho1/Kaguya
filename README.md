@@ -39,6 +39,12 @@ Ative o intent de conteudo de mensagens no portal do Discord, pois o bot usa com
 
 Configure `DISCORD_TOKEN` e `DATABASE_URL` nas variaveis da aplicacao na Discloud. Nao coloque token ou senha em `discloud.config`.
 
+Formato esperado da `DATABASE_URL`:
+
+```env
+DATABASE_URL=postgresql://usuario:senha@hostname-vlan:5432/database?schema=public
+```
+
 Antes do upload local, rode:
 
 ```powershell

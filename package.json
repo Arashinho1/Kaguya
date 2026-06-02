@@ -14,8 +14,9 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:deploy": "prisma db push",
+    "db:wait": "node scripts/wait-for-db.mjs",
     "discloud:build": "npm run db:validate && npm run build",
-    "discloud:start": "npm run discloud:build && npm run db:deploy && npm run start",
+    "discloud:start": "npm run discloud:build && npm run db:wait && npm run db:deploy && npm run start",
     "discloud:check": "node scripts/check-discloud.mjs",
     "db:studio": "prisma studio"
   },

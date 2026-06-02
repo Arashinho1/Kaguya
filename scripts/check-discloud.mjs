@@ -7,7 +7,8 @@ const requiredConfig = {
   MAIN: "index.js",
   BUILD: "npm run discloud:build",
   START: "npm run discloud:start",
-  VLAN: "true"
+  VLAN: "true",
+  HOSTNAME: "kaguyabot"
 };
 
 const requiredScripts = [
@@ -15,6 +16,7 @@ const requiredScripts = [
   "typecheck",
   "db:generate",
   "db:validate",
+  "db:wait",
   "db:deploy",
   "discloud:build",
   "discloud:start"
