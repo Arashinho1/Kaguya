@@ -9,6 +9,8 @@ import {
 } from "../../config/defaults.js";
 import { Prisma, type PrismaClient, type RpgGuild } from "../../generated/prisma/client.js";
 
+export const ADMIN_COMMAND_PERMISSION = "command.admin";
+
 export class GuildConfigService {
   private readonly prefixCache = new Map<string, string>();
 
@@ -243,6 +245,113 @@ export class GuildConfigService {
     });
 
     return typeof setting?.value === "string" && setting.value.length > 0 ? setting.value : null;
+  }
+
+  public async listRolePermissions(guild: Guild, permission: string): Promise<string[]> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const permissions = await this.prisma.guildRolePermission.findMany({
+      where: {
+        guildId: rpgGuild.id,
+        permission
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return permissions.map((entry) => entry.roleId);
+  }
+
+  public async hasAnyRolePermission(
+    guild: Guild,
+    roleIds: Iterable<string>,
+    permission: string
+  ): Promise<boolean> {
+    const roles = [...roleIds];
+
+    if (roles.length === 0) {
+      return false;
+    }
+
+    const rpgGuild = await this.ensureGuild(guild);
+    const count = await this.prisma.guildRolePermission.count({
+      where: {
+        guildId: rpgGuild.id,
+        permission,
+        roleId: { in: roles }
+      }
+    });
+
+    return count > 0;
+  }
+
+  public async grantRolePermission(
+    guild: Guild,
+    actorId: string,
+    roleId: string,
+    permission: string
+  ): Promise<void> {
+    const rpgGuild = await this.ensureGuild(guild);
+
+    await this.prisma.guildRolePermission.upsert({
+      where: {
+        guildId_roleId_permission: {
+          guildId: rpgGuild.id,
+          roleId,
+          permission
+        }
+      },
+      update: {},
+      create: {
+        guildId: rpgGuild.id,
+        roleId,
+        permission
+      }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "guild.permission.role.grant",
+      targetType: "GuildRolePermission",
+      targetId: `${roleId}:${permission}`,
+      after: { roleId, permission }
+    });
+  }
+
+  public async revokeRolePermission(
+    guild: Guild,
+    actorId: string,
+    roleId: string,
+    permission: string
+  ): Promise<boolean> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const existing = await this.prisma.guildRolePermission.findUnique({
+      where: {
+        guildId_roleId_permission: {
+          guildId: rpgGuild.id,
+          roleId,
+          permission
+        }
+      }
+    });
+
+    if (!existing) {
+      return false;
+    }
+
+    await this.prisma.guildRolePermission.delete({
+      where: { id: existing.id }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "guild.permission.role.revoke",
+      targetType: "GuildRolePermission",
+      targetId: `${roleId}:${permission}`,
+      before: { roleId, permission }
+    });
+
+    return true;
   }
 
   public async setSetting(

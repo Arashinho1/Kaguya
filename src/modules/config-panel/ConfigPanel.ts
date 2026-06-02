@@ -1,5 +1,7 @@
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   EmbedBuilder,
   MessageFlags,
   ModalBuilder,
@@ -8,20 +10,23 @@ import {
   TextInputBuilder,
   TextInputStyle,
   type Guild,
+  type ButtonInteraction,
   type Interaction,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
   type User
 } from "discord.js";
 
-import { hasManageGuildPermission } from "../../services/permissions.js";
+import { ADMIN_COMMAND_PERMISSION } from "../guild-config/GuildConfigService.js";
+import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import type { CommandServices } from "../../types/command.js";
 
 const CUSTOM_ID_PREFIX = "kaguya:config";
 const CONFIG_SELECT_ID = `${CUSTOM_ID_PREFIX}:select`;
+const PERMISSION_BUTTON_PREFIX = `${CUSTOM_ID_PREFIX}:permission`;
 
-type ConfigPage = "overview" | "prefix" | "adminLogs" | "commandLogs";
+type ConfigPage = "overview" | "prefix" | "adminLogs" | "commandLogs" | "permissions";
 
 export async function buildConfigPanel(
   services: CommandServices,
@@ -31,7 +36,7 @@ export async function buildConfigPanel(
 ) {
   return {
     embeds: [await buildConfigEmbed(services, guild, prefix, page)],
-    components: [buildConfigSelect()]
+    components: buildConfigComponents(page)
   };
 }
 
@@ -39,7 +44,7 @@ export async function handleConfigInteraction(
   interaction: Interaction,
   services: CommandServices
 ): Promise<boolean> {
-  if (!interaction.isStringSelectMenu() && !interaction.isModalSubmit()) {
+  if (!interaction.isStringSelectMenu() && !interaction.isModalSubmit() && !interaction.isButton()) {
     return false;
   }
 
@@ -52,7 +57,7 @@ export async function handleConfigInteraction(
     return true;
   }
 
-  if (!hasManageGuildPermission(interaction.memberPermissions)) {
+  if (!(await canUseConfigPanel(interaction, services))) {
     await replyPrivately(interaction, "Você precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
     return true;
   }
@@ -85,8 +90,19 @@ export async function handleConfigInteraction(
       return true;
     }
 
+    if (action === "permissions") {
+      const prefix = await services.guildConfig.getPrefix(interaction.guild).catch(() => ".");
+      await interaction.update(await buildConfigPanel(services, interaction.guild, prefix, "permissions"));
+      return true;
+    }
+
     const prefix = await services.guildConfig.getPrefix(interaction.guild).catch(() => ".");
     await interaction.update(await buildConfigPanel(services, interaction.guild, prefix, "overview"));
+    return true;
+  }
+
+  if (interaction.isButton()) {
+    await handleConfigButton(interaction, services);
     return true;
   }
 
@@ -151,17 +167,61 @@ async function buildConfigEmbed(
       name: "Log de comandos",
       value: "Registra comandos executados no servidor, com usuário, canal, servidor, comando e horário."
     });
+  } else if (page === "permissions") {
+    const adminRoleIds = await services.guildConfig.listRolePermissions(guild, ADMIN_COMMAND_PERMISSION);
+
+    embed.addFields({
+      name: "Permissões administrativas",
+      value:
+        adminRoleIds.length > 0
+          ? adminRoleIds.map((roleId) => `<@&${roleId}>`).join("\n")
+          : "Nenhum cargo configurado. Administrador e Gerenciar Servidor continuam liberados por padrão."
+    });
   } else {
     embed.addFields({
       name: "Ações disponíveis",
       value: [
-        "Use a lista suspensa para alterar prefixo, log administrativo ou log de comandos.",
+        "Use a lista suspensa para alterar prefixo, logs ou permissões.",
         `Atalhos ainda funcionam: \`${prefix}config prefix .\`, \`${prefix}config log #canal\` e \`${prefix}config log-comandos #canal\`.`
       ].join("\n")
     });
   }
 
   return embed;
+}
+
+function buildConfigComponents(page: ConfigPage) {
+  const components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] = [buildConfigSelect()];
+
+  if (page === "permissions") {
+    components.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${PERMISSION_BUTTON_PREFIX}:add`)
+          .setLabel("Adicionar cargo")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`${PERMISSION_BUTTON_PREFIX}:remove`)
+          .setLabel("Remover cargo")
+          .setStyle(ButtonStyle.Danger)
+      )
+    );
+  }
+
+  return components;
+}
+
+async function canUseConfigPanel(
+  interaction:
+    | StringSelectMenuInteraction<"cached">
+    | ModalSubmitInteraction<"cached">
+    | ButtonInteraction<"cached">,
+  services: CommandServices
+): Promise<boolean> {
+  return (
+    hasManageGuildPermission(interaction.memberPermissions) ||
+    hasConfiguredAdminRole(interaction.guild, interaction.member.roles.cache.keys(), services.guildConfig)
+  );
 }
 
 async function resetConfigMenu(
@@ -196,7 +256,11 @@ function buildConfigSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
         new StringSelectMenuOptionBuilder()
           .setLabel("Log de comandos")
           .setDescription("Define onde comandos executados serão registrados.")
-          .setValue("commandLogs")
+          .setValue("commandLogs"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Permissões")
+          .setDescription("Define cargos que podem usar comandos administrativos.")
+          .setValue("permissions")
       )
   );
 }
@@ -240,6 +304,39 @@ function buildLogChannelModal(
     .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
 }
 
+function buildRolePermissionModal(action: "add" | "remove"): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:permission:${action}`)
+    .setTitle(action === "add" ? "Adicionar cargo admin" : "Remover cargo admin")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("role")
+          .setLabel("Cargo")
+          .setPlaceholder("@Cargo ou ID do cargo")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
+}
+
+async function handleConfigButton(
+  interaction: ButtonInteraction<"cached">,
+  services: CommandServices
+): Promise<void> {
+  const action = interaction.customId.slice(`${PERMISSION_BUTTON_PREFIX}:`.length);
+
+  if (action === "add" || action === "remove") {
+    await interaction.showModal(buildRolePermissionModal(action));
+    return;
+  }
+
+  await interaction.reply({
+    content: "Ação desconhecida nesse painel.",
+    flags: MessageFlags.Ephemeral
+  });
+}
+
 async function handleConfigModal(
   interaction: ModalSubmitInteraction<"cached">,
   services: CommandServices
@@ -263,6 +360,56 @@ async function handleConfigModal(
       description: `O prefixo do servidor foi alterado de \`${currentPrefix}\` para \`${nextPrefix}\`.`
     });
     await interaction.editReply(`Prefixo atualizado para \`${nextPrefix}\`.`);
+    return;
+  }
+
+  if (action === "permission:add" || action === "permission:remove") {
+    const roleId = parseRoleId(interaction.fields.getTextInputValue("role"));
+
+    if (!roleId) {
+      await interaction.editReply("Informe uma menção ou ID de cargo válido.");
+      return;
+    }
+
+    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+
+    if (!role) {
+      await interaction.editReply("Não encontrei esse cargo no servidor.");
+      return;
+    }
+
+    if (action === "permission:add") {
+      await services.guildConfig.grantRolePermission(
+        interaction.guild,
+        interaction.user.id,
+        role.id,
+        ADMIN_COMMAND_PERMISSION
+      );
+      await sendConfigLog(interaction.guild, interaction.user, services, {
+        title: "Permissão administrativa concedida",
+        description: `O cargo ${role} agora pode usar comandos administrativos.`
+      });
+      await interaction.editReply(`Cargo ${role} liberado para comandos administrativos.`);
+      return;
+    }
+
+    const removed = await services.guildConfig.revokeRolePermission(
+      interaction.guild,
+      interaction.user.id,
+      role.id,
+      ADMIN_COMMAND_PERMISSION
+    );
+
+    if (!removed) {
+      await interaction.editReply(`O cargo ${role} não estava configurado como administrador do bot.`);
+      return;
+    }
+
+    await sendConfigLog(interaction.guild, interaction.user, services, {
+      title: "Permissão administrativa removida",
+      description: `O cargo ${role} não pode mais usar comandos administrativos pelo bot.`
+    });
+    await interaction.editReply(`Cargo ${role} removido das permissões administrativas.`);
     return;
   }
 
@@ -320,11 +467,16 @@ async function handleConfigModal(
 }
 
 function parsePage(value: string): ConfigPage {
-  if (value === "prefix" || value === "adminLogs" || value === "commandLogs") {
+  if (value === "prefix" || value === "adminLogs" || value === "commandLogs" || value === "permissions") {
     return value;
   }
 
   return value === "logs" ? "adminLogs" : "overview";
+}
+
+function parseRoleId(value: string): string | null {
+  const roleId = value.replace(/\D/g, "");
+  return /^\d{15,25}$/.test(roleId) ? roleId : null;
 }
 
 async function sendConfigLog(

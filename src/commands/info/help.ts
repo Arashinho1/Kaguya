@@ -4,6 +4,7 @@ import { buildHelpPanel } from "../../modules/help/HelpPanel.js";
 export const helpCommand: PrefixCommand = {
   name: "guia",
   aliases: ["ajuda", "help", "comandos"],
+  access: "member",
   description: "Mostra um menu com os comandos do bot.",
   usage: ".guia",
   async execute({ message, prefix }) {

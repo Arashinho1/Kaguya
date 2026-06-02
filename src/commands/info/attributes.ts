@@ -10,6 +10,7 @@ function formatRange(minValue: number, maxValue: number | null): string {
 export const attributesCommand: PrefixCommand = {
   name: "atributos",
   aliases: ["attrs"],
+  access: "member",
   description: "Mostra os atributos configurados neste RPG.",
   usage: ".atributos",
   async execute({ message, services, prefix }) {

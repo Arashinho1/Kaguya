@@ -3,7 +3,7 @@ import type { Message } from "discord.js";
 import { DEFAULT_PREFIX } from "../config/defaults.js";
 import { commands } from "../commands/index.js";
 import { sendCommandUsageLog } from "../services/commandUsageLog.js";
-import { canManageGuild } from "../services/permissions.js";
+import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
 export async function handleMessageCreate(
@@ -33,8 +33,10 @@ export async function handleMessageCreate(
     return;
   }
 
-  if (command.staffOnly && !canManageGuild(message)) {
-    await message.reply("Você precisa ter Administrador ou Gerenciar Servidor para usar esse comando.");
+  const hasAccess = await canUseCommandAccess(message, command.access, services.guildConfig);
+
+  if (!hasAccess) {
+    await message.reply(getAccessDeniedMessage(command.access));
     return;
   }
 
@@ -53,4 +55,16 @@ export async function handleMessageCreate(
     console.error(`[command:${command.name}]`, error);
     await message.reply("Não consegui executar esse comando. Verifique os logs do bot.");
   }
+}
+
+function getAccessDeniedMessage(access: "owner" | "admin" | "member"): string {
+  if (access === "owner") {
+    return "Esse comando é restrito ao dono do bot. Configure `BOT_OWNER_IDS` se quiser liberar IDs específicos.";
+  }
+
+  if (access === "admin") {
+    return "Você precisa ter Administrador ou Gerenciar Servidor para usar esse comando.";
+  }
+
+  return "Você não tem permissão para usar esse comando.";
 }

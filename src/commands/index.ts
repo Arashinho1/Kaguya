@@ -1,5 +1,6 @@
 import { attributeCommand } from "./admin/attribute.js";
 import { configCommand } from "./admin/config.js";
+import { serversCommand } from "./admin/servers.js";
 import { setupCommand } from "./admin/setup.js";
 import { attributesCommand } from "./info/attributes.js";
 import { chakraCommand } from "./info/chakra.js";
@@ -16,7 +17,8 @@ const commandList: PrefixCommand[] = [
   chakraCommand,
   setupCommand,
   configCommand,
-  attributeCommand
+  attributeCommand,
+  serversCommand
 ];
 
 export const commands = new Map<string, PrefixCommand>();

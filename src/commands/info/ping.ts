@@ -4,6 +4,7 @@ import type { PrefixCommand } from "../../types/command.js";
 
 export const pingCommand: PrefixCommand = {
   name: "ping",
+  access: "member",
   description: "Mostra se o bot está respondendo.",
   usage: ".ping",
   async execute({ message }) {

@@ -5,6 +5,7 @@ import type { PrefixCommand } from "../../types/command.js";
 
 export const chakraCommand: PrefixCommand = {
   name: "chakra",
+  access: "member",
   description: "Mostra como o Chakra é calculado neste servidor.",
   usage: ".chakra",
   async execute({ message, services }) {

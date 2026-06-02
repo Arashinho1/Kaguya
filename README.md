@@ -39,6 +39,8 @@ Ative o intent de conteúdo de mensagens no portal do Discord, pois o bot usa co
 
 Configure `DISCORD_TOKEN` e `DATABASE_URL` nas variáveis da aplicação na Discloud. Não coloque token ou senha em `discloud.config`.
 
+Para liberar comandos globais de dono, como `.servidores`, preencha `BOT_OWNER_IDS` com IDs separados por vírgula. Se ficar vazio, o bot tenta usar o dono/time da aplicação no Discord.
+
 Formato esperado da `DATABASE_URL`:
 
 ```env

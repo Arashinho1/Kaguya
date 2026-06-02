@@ -43,6 +43,12 @@ Comandos futuros devem seguir este padrão:
 - Toda função que pode variar por servidor deve salvar dados por servidor e aparecer no guia quando ficar pública.
 - Ao criar ou alterar comando, atualizar `.guia` e este documento no mesmo passo.
 
+Cada comando deve declarar um nível de acesso:
+
+- `member`: qualquer membro do servidor pode usar;
+- `admin`: exige Administrador ou Gerenciar Servidor;
+- `owner`: exige dono do bot ou ID definido em `BOT_OWNER_IDS`.
+
 ## Prefixo
 
 O prefixo inicial é `.`. Ele também fica salvo por servidor para permitir ajuste futuro sem mexer no código.
@@ -74,10 +80,15 @@ Funções atuais:
 - alterar prefixo por modal;
 - configurar log administrativo por modal;
 - configurar log de comandos por modal.
+- configurar cargos com permissão administrativa pelo painel.
 
 O log administrativo registra funções relacionadas à configuração do bot no servidor. O log de comandos registra comandos executados por usuários naquele servidor.
 
-Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`, `.config log-comandos #canal`), mas o uso oficial é pelo painel.
+Permissões administrativas usam `GuildRolePermission` com a permissão `command.admin`. Administrador e Gerenciar Servidor continuam liberados por padrão, e cargos configurados também passam a usar comandos `access: "admin"`.
+
+Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`, `.config log-comandos #canal`, `.config permissao adicionar @cargo`), mas o uso oficial é pelo painel.
+
+O comando `.servidores` lista todos os servidores em que o bot está. Por ser uma informação global da aplicação, ele é restrito ao dono do bot ou aos IDs definidos em `BOT_OWNER_IDS`.
 
 ## Chakra derivado
 

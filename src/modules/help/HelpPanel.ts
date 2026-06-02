@@ -11,7 +11,7 @@ import type { CommandServices } from "../../types/command.js";
 const CUSTOM_ID_PREFIX = "kaguya:help";
 const HELP_SELECT_ID = `${CUSTOM_ID_PREFIX}:select`;
 
-type HelpPage = "home" | "player" | "staff";
+type HelpPage = "home" | "player" | "staff" | "owner";
 
 interface HelpCommandEntry {
   command: string;
@@ -53,13 +53,21 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "config",
-    description: "Painel técnico do servidor: prefixo, log administrativo, log de comandos e resumo.",
+    description: "Painel técnico do servidor: prefixo, logs, permissões por cargo e resumo.",
     aliases: "cfg"
   },
   {
     command: "atributo",
     description: "Painel de atributos: cria, edita, remove e configura a fórmula de Chakra.",
     aliases: "attr"
+  }
+];
+
+const OWNER_COMMANDS: HelpCommandEntry[] = [
+  {
+    command: "servidores",
+    description: "Lista os servidores onde o bot está.",
+    aliases: "servers, guilds"
   }
 ];
 
@@ -106,6 +114,17 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
       });
   }
 
+  if (page === "owner") {
+    return new EmbedBuilder()
+      .setColor(0xc05621)
+      .setTitle("Guia do dono")
+      .setDescription(formatCommandList(prefix, OWNER_COMMANDS))
+      .addFields({
+        name: "Permissão",
+        value: "Comandos globais exigem dono do bot ou ID liberado em `BOT_OWNER_IDS`."
+      });
+  }
+
   return new EmbedBuilder()
     .setColor(0x2b6cb0)
     .setTitle("Guia do Kaguya")
@@ -117,13 +136,15 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
         "",
         "**Jogador** mostra ficha, atributos e Chakra.",
         "**Staff** mostra configurações e painéis administrativos.",
+        "**Dono** mostra comandos globais da aplicação.",
         "",
         "Comandos com muitas funções usam menus. Atalhos por texto existem só para manutenção."
       ].join("\n")
     )
     .addFields(
       { name: "Comandos de jogador", value: String(PLAYER_COMMANDS.length), inline: true },
-      { name: "Comandos de staff", value: String(STAFF_COMMANDS.length), inline: true }
+      { name: "Comandos de staff", value: String(STAFF_COMMANDS.length), inline: true },
+      { name: "Comandos de dono", value: String(OWNER_COMMANDS.length), inline: true }
     );
 }
 
@@ -144,7 +165,11 @@ function buildHelpSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
         new StringSelectMenuOptionBuilder()
           .setLabel("Staff")
           .setDescription("Setup, configurações e painéis administrativos.")
-          .setValue("staff")
+          .setValue("staff"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Dono")
+          .setDescription("Comandos globais restritos ao dono do bot.")
+          .setValue("owner")
       )
   );
 }
@@ -159,5 +184,5 @@ function formatCommandList(prefix: string, entries: HelpCommandEntry[]): string 
 }
 
 function parsePage(value: string): HelpPage {
-  return value === "player" || value === "staff" ? value : "home";
+  return value === "player" || value === "staff" || value === "owner" ? value : "home";
 }

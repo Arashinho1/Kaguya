@@ -6,7 +6,7 @@ import type { PrefixCommand } from "../../types/command.js";
 export const setupCommand: PrefixCommand = {
   name: "setup",
   aliases: ["iniciar"],
-  staffOnly: true,
+  access: "admin",
   description: "Prepara os dados padrão do RPG neste servidor.",
   usage: ".setup",
   async execute({ message, services }) {

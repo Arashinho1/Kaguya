@@ -12,7 +12,7 @@ import {
   type ModalSubmitInteraction
 } from "discord.js";
 
-import { hasManageGuildPermission } from "../../services/permissions.js";
+import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import type { CommandServices } from "../../types/command.js";
 import {
@@ -123,7 +123,7 @@ export async function handleAttributeInteraction(
     return true;
   }
 
-  if (!hasManageGuildPermission(interaction.memberPermissions)) {
+  if (!(await canUseAttributePanel(interaction, services))) {
     await replyPrivately(interaction, "Você precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
     return true;
   }
@@ -135,6 +135,16 @@ export async function handleAttributeInteraction(
 
   await handleAttributeModal(interaction, services);
   return true;
+}
+
+async function canUseAttributePanel(
+  interaction: ButtonInteraction<"cached"> | ModalSubmitInteraction<"cached">,
+  services: CommandServices
+): Promise<boolean> {
+  return (
+    hasManageGuildPermission(interaction.memberPermissions) ||
+    hasConfiguredAdminRole(interaction.guild, interaction.member.roles.cache.keys(), services.guildConfig)
+  );
 }
 
 async function handleAttributeButton(

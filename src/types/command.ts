@@ -18,11 +18,13 @@ export interface CommandContext {
   services: CommandServices;
 }
 
+export type CommandAccess = "owner" | "admin" | "member";
+
 export interface PrefixCommand {
   name: string;
   aliases?: string[];
   description: string;
   usage: string;
-  staffOnly?: boolean;
+  access: CommandAccess;
   execute(context: CommandContext): Promise<void>;
 }
