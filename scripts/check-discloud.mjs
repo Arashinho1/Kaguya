@@ -12,6 +12,7 @@ const requiredConfig = {
 
 const requiredScripts = [
   "build",
+  "typecheck",
   "db:generate",
   "db:validate",
   "db:deploy",
@@ -75,6 +76,14 @@ if (packageJsonText) {
     if (!packageJson.scripts?.[script]) {
       failures.push(`package.json precisa do script ${script}.`);
     }
+  }
+
+  if (!packageJson.scripts?.build?.includes("db:generate")) {
+    failures.push("package.json precisa gerar o Prisma Client dentro do script build.");
+  }
+
+  if (!packageJson.scripts?.build?.includes("typecheck")) {
+    failures.push("package.json precisa compilar TypeScript via typecheck dentro do script build.");
   }
 }
 

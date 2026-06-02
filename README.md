@@ -47,3 +47,5 @@ npm.cmd run discloud:build
 ```
 
 Envie a raiz deste projeto, onde ficam `discloud.config`, `package.json` e `index.js`.
+
+Observacao: a Discloud executa `npm run build --if-present` durante a montagem. Por isso o script `build` tambem gera o Prisma Client antes de compilar TypeScript.
