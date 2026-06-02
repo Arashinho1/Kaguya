@@ -74,6 +74,10 @@ const packageJsonText = readText("package.json");
 if (packageJsonText) {
   const packageJson = JSON.parse(packageJsonText);
 
+  if (packageJson.type !== "module") {
+    failures.push("package.json precisa ter type=module para rodar o Prisma Client 7 gerado em ESM.");
+  }
+
   for (const script of requiredScripts) {
     if (!packageJson.scripts?.[script]) {
       failures.push(`package.json precisa do script ${script}.`);

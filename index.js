@@ -1,3 +1,1 @@
-"use strict";
-
-require("./dist/index.js");
+import "./dist/index.js";

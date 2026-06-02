@@ -2,6 +2,7 @@
   "name": "kaguya-rpg-bot",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Bot configuravel para servidores de RPG com tema Naruto.",
   "main": "index.js",
   "scripts": {
