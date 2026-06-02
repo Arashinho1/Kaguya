@@ -1,0 +1,39 @@
+{
+  "name": "kaguya-rpg-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bot configuravel para servidores de RPG com tema Naruto.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node index.js",
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:deploy": "prisma db push",
+    "discloud:build": "npm run db:validate && npm run db:generate && npm run build",
+    "discloud:start": "npm run discloud:build && npm run db:deploy && npm run start",
+    "discloud:check": "node scripts/check-discloud.mjs",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "prisma": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

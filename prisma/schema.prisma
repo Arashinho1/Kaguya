@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ConfigValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  CHANNEL
+  ROLE
+  USER
+}
+
+model RpgGuild {
+  id        String   @id @default(cuid())
+  discordId String   @unique
+  name      String
+  prefix    String   @default(".")
+  locale    String   @default("pt-BR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  settings    GuildSetting[]
+  permissions GuildRolePermission[]
+  auditLogs   AuditLog[]
+  attributes  AttributeDefinition[]
+  clans       Clan[]
+  villages    Village[]
+  ranks       RankDefinition[]
+  jutsuTypes  JutsuType[]
+  characters  Character[]
+
+  @@map("rpg_guilds")
+}
+
+model GuildSetting {
+  id          String          @id @default(cuid())
+  guildId     String
+  key         String
+  label       String
+  description String?
+  value       Json
+  valueType   ConfigValueType @default(JSON)
+  isPublic    Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("guild_settings")
+}
+
+model GuildRolePermission {
+  id         String   @id @default(cuid())
+  guildId    String
+  roleId     String
+  permission String
+  createdAt  DateTime @default(now())
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, roleId, permission])
+  @@index([guildId])
+  @@map("guild_role_permissions")
+}
+
+model AttributeDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  baseValue   Int      @default(0)
+  minValue    Int      @default(0)
+  maxValue    Int?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("attribute_definitions")
+}
+
+model Clan {
+  id           String   @id @default(cuid())
+  guildId      String
+  name         String
+  description  String?
+  bonuses      Json     @default("{}")
+  restrictions Json     @default("{}")
+  memberLimit  Int?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  characters Character[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@map("clans")
+}
+
+model Village {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  description String?
+  metadata    Json     @default("{}")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  characters Character[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@map("villages")
+}
+
+model RankDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  metadata    Json     @default("{}")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  characters Character[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("rank_definitions")
+}
+
+model JutsuType {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  metadata    Json     @default("{}")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("jutsu_types")
+}
+
+model Character {
+  id         String   @id @default(cuid())
+  guildId    String
+  userId     String
+  name       String
+  clanId     String?
+  villageId  String?
+  rankId     String?
+  attributes Json     @default("{}")
+  metadata   Json     @default("{}")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  guild   RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  clan    Clan?           @relation(fields: [clanId], references: [id], onDelete: SetNull)
+  village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
+  rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
+
+  @@unique([guildId, name])
+  @@index([guildId, userId])
+  @@map("characters")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  guildId    String
+  actorId    String
+  action     String
+  targetType String
+  targetId   String?
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, createdAt])
+  @@map("audit_logs")
+}
