@@ -72,9 +72,12 @@ Funções atuais:
 
 - ver resumo de configuração;
 - alterar prefixo por modal;
-- configurar canal de logs por modal.
+- configurar log administrativo por modal;
+- configurar log de comandos por modal.
 
-Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`), mas o uso oficial é pelo painel.
+O log administrativo registra funções relacionadas à configuração do bot no servidor. O log de comandos registra comandos executados por usuários naquele servidor.
+
+Atalhos de texto existem para manutenção (`.config prefix .`, `.config log #canal`, `.config log-comandos #canal`), mas o uso oficial é pelo painel.
 
 ## Chakra derivado
 

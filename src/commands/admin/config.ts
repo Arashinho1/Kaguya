@@ -19,7 +19,7 @@ export const configCommand: PrefixCommand = {
   aliases: ["cfg"],
   staffOnly: true,
   description: "Mostra e altera configurações do RPG neste servidor.",
-  usage: ".config",
+  usage: ".config | .config log #canal | .config log-comandos #canal",
   async execute({ message, args, prefix, services }) {
     const subcommand = args.shift()?.toLowerCase();
 
@@ -45,7 +45,7 @@ export const configCommand: PrefixCommand = {
       return;
     }
 
-    if (subcommand === "log") {
+    if (["log", "log-admin", "admin-log", "log-administrativo"].includes(subcommand)) {
       const mentionedChannel = message.mentions.channels.first();
       const channelId = mentionedChannel?.id ?? args[0]?.replace(/\D/g, "");
 
@@ -63,10 +63,35 @@ export const configCommand: PrefixCommand = {
 
       await services.guildConfig.setLogChannel(message.guild, message.author.id, channel.id);
       await sendStaffLog(message, services, {
-        title: "Canal de logs configurado",
-        description: `O canal de logs agora é <#${channel.id}>.`
+        title: "Log administrativo configurado",
+        description: `O log administrativo agora é <#${channel.id}>.`
       });
-      await message.reply(`Canal de logs configurado: <#${channel.id}>.`);
+      await message.reply(`Log administrativo configurado: <#${channel.id}>.`);
+      return;
+    }
+
+    if (["log-comandos", "comandos-log", "command-log", "log-uso"].includes(subcommand)) {
+      const mentionedChannel = message.mentions.channels.first();
+      const channelId = mentionedChannel?.id ?? args[0]?.replace(/\D/g, "");
+
+      if (!channelId) {
+        await message.reply(`Use \`${prefix}config log-comandos #canal\`.`);
+        return;
+      }
+
+      const channel = await message.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel || channel.type === ChannelType.GuildCategory || !channel.isTextBased()) {
+        await message.reply("Esse canal não parece ser um canal de texto válido.");
+        return;
+      }
+
+      await services.guildConfig.setCommandLogChannel(message.guild, message.author.id, channel.id);
+      await sendStaffLog(message, services, {
+        title: "Log de comandos configurado",
+        description: `O log de comandos agora é <#${channel.id}>.`
+      });
+      await message.reply(`Log de comandos configurado: <#${channel.id}>.`);
       return;
     }
 

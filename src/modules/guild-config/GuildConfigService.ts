@@ -198,7 +198,7 @@ export class GuildConfigService {
   public async setLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
     await this.setSetting(guild, actorId, {
       key: "logChannelId",
-      label: "Canal de logs",
+      label: "Log administrativo",
       description: "Canal usado para registrar alterações administrativas.",
       value: channelId,
       valueType: "CHANNEL",
@@ -213,6 +213,31 @@ export class GuildConfigService {
         guildId_key: {
           guildId: rpgGuild.id,
           key: "logChannelId"
+        }
+      }
+    });
+
+    return typeof setting?.value === "string" && setting.value.length > 0 ? setting.value : null;
+  }
+
+  public async setCommandLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
+    await this.setSetting(guild, actorId, {
+      key: "commandLogChannelId",
+      label: "Log de comandos",
+      description: "Canal usado para registrar comandos executados neste servidor.",
+      value: channelId,
+      valueType: "CHANNEL",
+      isPublic: false
+    });
+  }
+
+  public async getCommandLogChannelId(guild: Guild): Promise<string | null> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const setting = await this.prisma.guildSetting.findUnique({
+      where: {
+        guildId_key: {
+          guildId: rpgGuild.id,
+          key: "commandLogChannelId"
         }
       }
     });

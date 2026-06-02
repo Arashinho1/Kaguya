@@ -2,6 +2,7 @@ import type { Message } from "discord.js";
 
 import { DEFAULT_PREFIX } from "../config/defaults.js";
 import { commands } from "../commands/index.js";
+import { sendCommandUsageLog } from "../services/commandUsageLog.js";
 import { canManageGuild } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
@@ -44,6 +45,9 @@ export async function handleMessageCreate(
       commandName,
       prefix,
       services
+    });
+    await sendCommandUsageLog(message, services, { commandName }).catch((error) => {
+      console.error(`[command-log:${command.name}]`, error);
     });
   } catch (error) {
     console.error(`[command:${command.name}]`, error);

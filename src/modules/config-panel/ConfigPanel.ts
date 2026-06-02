@@ -21,7 +21,7 @@ import type { CommandServices } from "../../types/command.js";
 const CUSTOM_ID_PREFIX = "kaguya:config";
 const CONFIG_SELECT_ID = `${CUSTOM_ID_PREFIX}:select`;
 
-type ConfigPage = "overview" | "prefix" | "logs";
+type ConfigPage = "overview" | "prefix" | "adminLogs" | "commandLogs";
 
 export async function buildConfigPanel(
   services: CommandServices,
@@ -67,10 +67,21 @@ export async function handleConfigInteraction(
       return true;
     }
 
-    if (action === "logs") {
+    if (action === "adminLogs") {
       const logChannelId = await services.guildConfig.getLogChannelId(interaction.guild).catch(() => null);
       await resetConfigMenu(interaction, services);
-      await interaction.showModal(buildLogChannelModal(logChannelId));
+      await interaction.showModal(
+        buildLogChannelModal("adminLogs", "Configurar log administrativo", logChannelId)
+      );
+      return true;
+    }
+
+    if (action === "commandLogs") {
+      const logChannelId = await services.guildConfig.getCommandLogChannelId(interaction.guild).catch(() => null);
+      await resetConfigMenu(interaction, services);
+      await interaction.showModal(
+        buildLogChannelModal("commandLogs", "Configurar log de comandos", logChannelId)
+      );
       return true;
     }
 
@@ -100,7 +111,10 @@ async function buildConfigEmbed(
   page: ConfigPage
 ): Promise<EmbedBuilder> {
   const overview = await services.guildConfig.getGuildOverview(guild);
-  const logChannelId = await services.guildConfig.getLogChannelId(guild).catch(() => null);
+  const [adminLogChannelId, commandLogChannelId] = await Promise.all([
+    services.guildConfig.getLogChannelId(guild).catch(() => null),
+    services.guildConfig.getCommandLogChannelId(guild).catch(() => null)
+  ]);
 
   const embed = new EmbedBuilder()
     .setColor(0x2b6cb0)
@@ -111,7 +125,8 @@ async function buildConfigEmbed(
         "Tudo aqui é salvo por servidor e pode ser ajustado sem mexer no código.",
         "",
         `Prefixo atual: \`${overview.prefix}\``,
-        `Canal de logs: ${logChannelId ? `<#${logChannelId}>` : "não configurado"}`
+        `Log administrativo: ${adminLogChannelId ? `<#${adminLogChannelId}>` : "não configurado"}`,
+        `Log de comandos: ${commandLogChannelId ? `<#${commandLogChannelId}>` : "não configurado"}`
       ].join("\n")
     )
     .addFields(
@@ -126,17 +141,22 @@ async function buildConfigEmbed(
       name: "Prefixo",
       value: "Use a opção `Alterar prefixo` na lista suspensa. O prefixo precisa ter 1 a 5 caracteres, sem espaços."
     });
-  } else if (page === "logs") {
+  } else if (page === "adminLogs") {
     embed.addFields({
-      name: "Logs",
-      value: "Use a opção `Canal de logs` na lista suspensa. Aceita menção do canal ou ID."
+      name: "Log administrativo",
+      value: "Registra configurações do bot neste servidor, como prefixo, canais de log e futuras regras administrativas."
+    });
+  } else if (page === "commandLogs") {
+    embed.addFields({
+      name: "Log de comandos",
+      value: "Registra comandos executados no servidor, com usuário, canal, servidor, comando e horário."
     });
   } else {
     embed.addFields({
       name: "Ações disponíveis",
       value: [
-        "Use a lista suspensa para alterar prefixo ou canal de logs.",
-        `Atalhos ainda funcionam: \`${prefix}config prefix .\` e \`${prefix}config log #canal\`.`
+        "Use a lista suspensa para alterar prefixo, log administrativo ou log de comandos.",
+        `Atalhos ainda funcionam: \`${prefix}config prefix .\`, \`${prefix}config log #canal\` e \`${prefix}config log-comandos #canal\`.`
       ].join("\n")
     });
   }
@@ -170,9 +190,13 @@ function buildConfigSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
           .setDescription("Muda o prefixo usado pelos comandos.")
           .setValue("prefix"),
         new StringSelectMenuOptionBuilder()
-          .setLabel("Canal de logs")
-          .setDescription("Define onde alterações administrativas serão registradas.")
-          .setValue("logs")
+          .setLabel("Log administrativo")
+          .setDescription("Define onde configurações do bot serão registradas.")
+          .setValue("adminLogs"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Log de comandos")
+          .setDescription("Define onde comandos executados serão registrados.")
+          .setValue("commandLogs")
       )
   );
 }
@@ -194,10 +218,14 @@ function buildPrefixModal(currentPrefix: string): ModalBuilder {
     );
 }
 
-function buildLogChannelModal(currentChannelId: string | null): ModalBuilder {
+function buildLogChannelModal(
+  action: "adminLogs" | "commandLogs",
+  title: string,
+  currentChannelId: string | null
+): ModalBuilder {
   const input = new TextInputBuilder()
     .setCustomId("channel")
-    .setLabel("Canal de logs")
+    .setLabel("Canal")
     .setPlaceholder("#logs ou ID do canal")
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
@@ -207,8 +235,8 @@ function buildLogChannelModal(currentChannelId: string | null): ModalBuilder {
   }
 
   return new ModalBuilder()
-    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:logs`)
-    .setTitle("Configurar canal de logs")
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:${action}`)
+    .setTitle(title)
     .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
 }
 
@@ -238,7 +266,7 @@ async function handleConfigModal(
     return;
   }
 
-  if (action === "logs") {
+  if (action === "adminLogs" || action === "logs") {
     const rawChannel = interaction.fields.getTextInputValue("channel");
     const channelId = rawChannel.replace(/\D/g, "");
 
@@ -256,10 +284,35 @@ async function handleConfigModal(
 
     await services.guildConfig.setLogChannel(interaction.guild, interaction.user.id, channel.id);
     await sendConfigLog(interaction.guild, interaction.user, services, {
-      title: "Canal de logs configurado",
-      description: `O canal de logs agora é <#${channel.id}>.`
+      title: "Log administrativo configurado",
+      description: `O log administrativo agora é <#${channel.id}>.`
     });
-    await interaction.editReply(`Canal de logs configurado: <#${channel.id}>.`);
+    await interaction.editReply(`Log administrativo configurado: <#${channel.id}>.`);
+    return;
+  }
+
+  if (action === "commandLogs") {
+    const rawChannel = interaction.fields.getTextInputValue("channel");
+    const channelId = rawChannel.replace(/\D/g, "");
+
+    if (!channelId) {
+      await interaction.editReply("Informe uma menção ou ID de canal válido.");
+      return;
+    }
+
+    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+    if (!channel || !channel.isTextBased()) {
+      await interaction.editReply("Esse canal não parece ser um canal de texto válido.");
+      return;
+    }
+
+    await services.guildConfig.setCommandLogChannel(interaction.guild, interaction.user.id, channel.id);
+    await sendConfigLog(interaction.guild, interaction.user, services, {
+      title: "Log de comandos configurado",
+      description: `O log de comandos agora é <#${channel.id}>.`
+    });
+    await interaction.editReply(`Log de comandos configurado: <#${channel.id}>.`);
     return;
   }
 
@@ -267,7 +320,11 @@ async function handleConfigModal(
 }
 
 function parsePage(value: string): ConfigPage {
-  return value === "prefix" || value === "logs" ? value : "overview";
+  if (value === "prefix" || value === "adminLogs" || value === "commandLogs") {
+    return value;
+  }
+
+  return value === "logs" ? "adminLogs" : "overview";
 }
 
 async function sendConfigLog(

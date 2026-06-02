@@ -53,7 +53,7 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "config",
-    description: "Painel técnico do servidor: prefixo, canal de logs e resumo das configurações.",
+    description: "Painel técnico do servidor: prefixo, log administrativo, log de comandos e resumo.",
     aliases: "cfg"
   },
   {

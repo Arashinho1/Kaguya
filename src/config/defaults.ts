@@ -10,8 +10,16 @@ export const DEFAULT_CHAKRA_FORMULA = {
 export const DEFAULT_GUILD_SETTINGS = [
   {
     key: "logChannelId",
-    label: "Canal de logs",
+    label: "Log administrativo",
     description: "Canal usado para registrar alterações administrativas.",
+    value: "",
+    valueType: "CHANNEL",
+    isPublic: false
+  },
+  {
+    key: "commandLogChannelId",
+    label: "Log de comandos",
+    description: "Canal usado para registrar comandos executados neste servidor.",
     value: "",
     valueType: "CHANNEL",
     isPublic: false
