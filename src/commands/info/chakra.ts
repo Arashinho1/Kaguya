@@ -5,7 +5,7 @@ import type { PrefixCommand } from "../../types/command.js";
 
 export const chakraCommand: PrefixCommand = {
   name: "chakra",
-  description: "Mostra como o Chakra e calculado neste servidor.",
+  description: "Mostra como o Chakra é calculado neste servidor.",
   usage: ".chakra",
   async execute({ message, services }) {
     const formula = await services.attributes.getChakraFormula(message.guild);
@@ -14,7 +14,7 @@ export const chakraCommand: PrefixCommand = {
       embeds: [
         new EmbedBuilder()
           .setColor(0x805ad5)
-          .setTitle("Formula de Chakra")
+          .setTitle("Fórmula de Chakra")
           .setDescription(`\`${formatChakraFormula(formula)}\``)
           .addFields(
             {
@@ -23,7 +23,7 @@ export const chakraCommand: PrefixCommand = {
             },
             { name: "Multiplicador da soma", value: String(formula.sourceMultiplier), inline: true },
             { name: "Multiplicador isolado", value: String(formula.isolatedMultiplier), inline: true },
-            { name: "Bonus direto", value: String(formula.directBonus), inline: true }
+            { name: "Bônus direto", value: String(formula.directBonus), inline: true }
           )
       ]
     });

@@ -18,7 +18,7 @@ export const configCommand: PrefixCommand = {
   name: "config",
   aliases: ["cfg"],
   staffOnly: true,
-  description: "Mostra e altera configuracoes do RPG neste servidor.",
+  description: "Mostra e altera configurações do RPG neste servidor.",
   usage: ".config",
   async execute({ message, args, prefix, services }) {
     const subcommand = args.shift()?.toLowerCase();
@@ -32,7 +32,7 @@ export const configCommand: PrefixCommand = {
       const nextPrefix = normalizePrefix(args[0] ?? "");
 
       if (!nextPrefix) {
-        await message.reply("Informe um prefixo com 1 a 5 caracteres, sem espacos.");
+        await message.reply("Informe um prefixo com 1 a 5 caracteres, sem espaços.");
         return;
       }
 
@@ -57,14 +57,14 @@ export const configCommand: PrefixCommand = {
       const channel = await message.guild.channels.fetch(channelId).catch(() => null);
 
       if (!channel || channel.type === ChannelType.GuildCategory || !channel.isTextBased()) {
-        await message.reply("Esse canal nao parece ser um canal de texto valido.");
+        await message.reply("Esse canal não parece ser um canal de texto válido.");
         return;
       }
 
       await services.guildConfig.setLogChannel(message.guild, message.author.id, channel.id);
       await sendStaffLog(message, services, {
         title: "Canal de logs configurado",
-        description: `O canal de logs agora e <#${channel.id}>.`
+        description: `O canal de logs agora é <#${channel.id}>.`
       });
       await message.reply(`Canal de logs configurado: <#${channel.id}>.`);
       return;
@@ -74,8 +74,8 @@ export const configCommand: PrefixCommand = {
       embeds: [
         new EmbedBuilder()
           .setColor(0xc53030)
-          .setTitle("Configuracao desconhecida")
-          .setDescription(`Use \`${prefix}config\` para ver as opcoes disponiveis.`)
+          .setTitle("Configuração desconhecida")
+          .setDescription(`Use \`${prefix}config\` para ver as opções disponíveis.`)
       ]
     });
   }

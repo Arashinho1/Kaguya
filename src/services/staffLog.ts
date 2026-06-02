@@ -40,7 +40,7 @@ export async function sendStaffLogForGuild(
         .setColor(0x4a5568)
         .setTitle(input.title)
         .setDescription(input.description)
-        .addFields({ name: "Responsavel", value: `${actor} (${actor.id})` })
+        .addFields({ name: "Responsável", value: `${actor} (${actor.id})` })
         .setTimestamp()
     ]
   });

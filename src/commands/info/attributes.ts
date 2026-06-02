@@ -36,7 +36,7 @@ export const attributesCommand: PrefixCommand = {
               })
               .join("\n\n")
           )
-          .addFields({ name: "Formula de Chakra", value: `\`${formatChakraFormula(chakraFormula)}\`` })
+          .addFields({ name: "Fórmula de Chakra", value: `\`${formatChakraFormula(chakraFormula)}\`` })
       ]
     });
   }

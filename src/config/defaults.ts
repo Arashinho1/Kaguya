@@ -11,14 +11,14 @@ export const DEFAULT_GUILD_SETTINGS = [
   {
     key: "logChannelId",
     label: "Canal de logs",
-    description: "Canal usado para registrar alteracoes administrativas.",
+    description: "Canal usado para registrar alterações administrativas.",
     value: "",
     valueType: "CHANNEL",
     isPublic: false
   },
   {
     key: "allowMultipleCharacters",
-    label: "Multiplos personagens",
+    label: "Múltiplos personagens",
     description: "Define se um jogador pode ter mais de um personagem ativo.",
     value: false,
     valueType: "BOOLEAN",
@@ -26,8 +26,8 @@ export const DEFAULT_GUILD_SETTINGS = [
   },
   {
     key: "chakraFormula",
-    label: "Formula de Chakra",
-    description: "Define como o Chakra derivado e calculado a partir dos atributos base.",
+    label: "Fórmula de Chakra",
+    description: "Define como o Chakra derivado é calculado a partir dos atributos base.",
     value: DEFAULT_CHAKRA_FORMULA,
     valueType: "JSON",
     isPublic: true
@@ -35,20 +35,20 @@ export const DEFAULT_GUILD_SETTINGS = [
 ] as const;
 
 export const DEFAULT_ATTRIBUTES = [
-  { key: "forca", name: "Forca", sortOrder: 10 },
+  { key: "forca", name: "Força", sortOrder: 10 },
   { key: "velocidade", name: "Velocidade", sortOrder: 20 },
-  { key: "resistencia", name: "Resistencia", sortOrder: 30 },
+  { key: "resistencia", name: "Resistência", sortOrder: 30 },
   {
     key: "chakra",
     name: "Chakra",
-    description: "Valor derivado pela formula de chakra do servidor.",
+    description: "Valor derivado pela fórmula de chakra do servidor.",
     sortOrder: 40
   },
   { key: "ninjutsu", name: "Ninjutsu", sortOrder: 50 },
   { key: "taijutsu", name: "Taijutsu", sortOrder: 60 },
   { key: "genjutsu", name: "Genjutsu", sortOrder: 70 },
   { key: "stamina", name: "Stamina", sortOrder: 80 },
-  { key: "inteligencia", name: "Inteligencia", sortOrder: 90 }
+  { key: "inteligencia", name: "Inteligência", sortOrder: 90 }
 ] as const;
 
 export const DEFAULT_RANKS = [

@@ -4,7 +4,7 @@ import type { PrefixCommand } from "../../types/command.js";
 
 export const pingCommand: PrefixCommand = {
   name: "ping",
-  description: "Mostra se o bot esta respondendo.",
+  description: "Mostra se o bot está respondendo.",
   usage: ".ping",
   async execute({ message }) {
     const sent = await message.reply("Calculando...");
@@ -16,7 +16,7 @@ export const pingCommand: PrefixCommand = {
         new EmbedBuilder()
           .setColor(0x2f855a)
           .setTitle("Kaguya online")
-          .setDescription(`Latencia: ${latency}ms`)
+          .setDescription(`Latência: ${latency}ms`)
       ]
     });
   }

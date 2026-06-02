@@ -199,7 +199,7 @@ export class GuildConfigService {
     await this.setSetting(guild, actorId, {
       key: "logChannelId",
       label: "Canal de logs",
-      description: "Canal usado para registrar alteracoes administrativas.",
+      description: "Canal usado para registrar alterações administrativas.",
       value: channelId,
       valueType: "CHANNEL",
       isPublic: false

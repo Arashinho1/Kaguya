@@ -35,8 +35,8 @@ export async function buildCharacterPanel(
           .setTitle(`Ficha de ${target.displayName}`)
           .setDescription(
             target.id === viewer.id
-              ? "Voce ainda nao tem uma ficha ativa neste RPG."
-              : "Esse jogador ainda nao tem uma ficha ativa neste RPG."
+              ? "Você ainda não tem uma ficha ativa neste RPG."
+              : "Esse jogador ainda não tem uma ficha ativa neste RPG."
           )
       ],
       components:
@@ -86,7 +86,7 @@ export async function handleCharacterInteraction(
   }
 
   if (!interaction.inCachedGuild()) {
-    await replyPrivately(interaction, "Esse painel so pode ser usado dentro de um servidor.");
+    await replyPrivately(interaction, "Esse painel só pode ser usado dentro de um servidor.");
     return true;
   }
 
@@ -140,7 +140,7 @@ async function handleCharacterButton(
 
     if (existing) {
       await interaction.reply({
-        content: "Voce ja tem uma ficha ativa neste servidor.",
+        content: "Você já tem uma ficha ativa neste servidor.",
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -155,7 +155,7 @@ async function handleCharacterButton(
 
     if (!existing) {
       await interaction.reply({
-        content: "Voce ainda nao tem uma ficha ativa neste servidor.",
+        content: "Você ainda não tem uma ficha ativa neste servidor.",
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -171,19 +171,19 @@ async function handleCharacterButton(
     const updated = await services.characters.refreshCharacterAttributes(interaction.guild, interaction.user);
 
     if (!updated) {
-      await interaction.editReply("Voce ainda nao tem uma ficha ativa neste servidor.");
+      await interaction.editReply("Você ainda não tem uma ficha ativa neste servidor.");
       return;
     }
 
     await interaction.editReply({
-      content: "Atributos e Chakra recalculados com a configuracao atual do servidor.",
+      content: "Atributos e Chakra recalculados com a configuração atual do servidor.",
       embeds: [renderCharacterEmbed(services, interaction.user, updated)]
     });
     return;
   }
 
   await interaction.reply({
-    content: "Acao desconhecida nesse painel.",
+    content: "Ação desconhecida nesse painel.",
     flags: MessageFlags.Ephemeral
   });
 }
@@ -217,7 +217,7 @@ async function handleCharacterModal(
     }
 
     if (typeof imageUrl === "string" && !isValidHttpUrl(imageUrl)) {
-      await interaction.editReply("A imagem precisa ser uma URL http ou https valida.");
+      await interaction.editReply("A imagem precisa ser uma URL http ou https válida.");
       return;
     }
 
@@ -233,7 +233,7 @@ async function handleCharacterModal(
     });
 
     if (!updated) {
-      await interaction.editReply("Voce ainda nao tem uma ficha ativa neste servidor.");
+      await interaction.editReply("Você ainda não tem uma ficha ativa neste servidor.");
       return;
     }
 
@@ -247,7 +247,7 @@ async function handleCharacterModal(
   const existing = await services.characters.findActiveByUser(interaction.guild, interaction.user.id);
 
   if (existing) {
-    await interaction.editReply("Voce ja tem uma ficha ativa neste servidor.");
+    await interaction.editReply("Você já tem uma ficha ativa neste servidor.");
     return;
   }
 
@@ -261,7 +261,7 @@ async function handleCharacterModal(
   }
 
   if (imageUrl && !isValidHttpUrl(imageUrl)) {
-    await interaction.editReply("A imagem precisa ser uma URL http ou https valida.");
+    await interaction.editReply("A imagem precisa ser uma URL http ou https válida.");
     return;
   }
 
@@ -286,7 +286,7 @@ function buildCreateCharacterModal(): ModalBuilder {
       textInputRow(
         "concept",
         "Conceito",
-        "Genin especialista em taijutsu e perseguicao.",
+        "Genin especialista em taijutsu e perseguição.",
         TextInputStyle.Paragraph,
         false
       ),

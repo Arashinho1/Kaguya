@@ -33,7 +33,7 @@ export async function handleMessageCreate(
   }
 
   if (command.staffOnly && !canManageGuild(message)) {
-    await message.reply("Voce precisa ter Administrador ou Gerenciar Servidor para usar esse comando.");
+    await message.reply("Você precisa ter Administrador ou Gerenciar Servidor para usar esse comando.");
     return;
   }
 
@@ -47,6 +47,6 @@ export async function handleMessageCreate(
     });
   } catch (error) {
     console.error(`[command:${command.name}]`, error);
-    await message.reply("Nao consegui executar esse comando. Verifique os logs do bot.");
+    await message.reply("Não consegui executar esse comando. Verifique os logs do bot.");
   }
 }

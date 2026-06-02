@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials } from "discord.js";
+import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
 
 import { env } from "./config/env.js";
 import { prisma, closeDatabase } from "./database/prisma.js";
@@ -26,7 +26,7 @@ const services = {
   characters: new CharacterService(prisma, guildConfig, attributes)
 };
 
-client.once("ready", (readyClient) => {
+client.once(Events.ClientReady, (readyClient) => {
   console.log(`Kaguya online como ${readyClient.user.tag}`);
 });
 

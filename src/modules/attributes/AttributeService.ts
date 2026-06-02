@@ -204,8 +204,8 @@ export class AttributeService {
         }
       },
       update: {
-        label: "Formula de Chakra",
-        description: "Define como o Chakra derivado e calculado a partir dos atributos base.",
+        label: "Fórmula de Chakra",
+        description: "Define como o Chakra derivado é calculado a partir dos atributos base.",
         value: normalized as unknown as Prisma.InputJsonValue,
         valueType: "JSON",
         isPublic: true
@@ -213,8 +213,8 @@ export class AttributeService {
       create: {
         guildId: rpgGuild.id,
         key: "chakraFormula",
-        label: "Formula de Chakra",
-        description: "Define como o Chakra derivado e calculado a partir dos atributos base.",
+        label: "Fórmula de Chakra",
+        description: "Define como o Chakra derivado é calculado a partir dos atributos base.",
         value: normalized as unknown as Prisma.InputJsonValue,
         valueType: "JSON",
         isPublic: true

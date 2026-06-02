@@ -6,7 +6,7 @@ const maxAttempts = Number(process.env.DB_WAIT_ATTEMPTS ?? 30);
 const delayMs = Number(process.env.DB_WAIT_DELAY_MS ?? 5000);
 
 if (!connectionString) {
-  console.error("DATABASE_URL nao configurada.");
+  console.error("DATABASE_URL não configurada.");
   process.exit(1);
 }
 
@@ -24,7 +24,7 @@ function redactDatabaseUrl(url) {
 
     return parsed.toString();
   } catch {
-    return "DATABASE_URL invalida ou sensivel";
+    return "DATABASE_URL inválida ou sensível";
   }
 }
 
@@ -53,5 +53,5 @@ for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
   }
 }
 
-console.error("Nao foi possivel conectar no banco depois das tentativas configuradas.");
+console.error("Não foi possível conectar no banco depois das tentativas configuradas.");
 process.exit(1);

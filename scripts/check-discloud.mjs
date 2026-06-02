@@ -29,7 +29,7 @@ const failures = [];
 
 function readText(path) {
   if (!existsSync(path)) {
-    failures.push(`${path} nao existe.`);
+    failures.push(`${path} não existe.`);
     return "";
   }
 
@@ -103,7 +103,7 @@ for (const entry of requiredIgnoreEntries) {
 
 for (const key of requiredEnv) {
   if (!process.env[key]) {
-    failures.push(`Variavel ${key} nao configurada no ambiente local.`);
+    failures.push(`Variável ${key} não configurada no ambiente local.`);
   }
 }
 
@@ -118,4 +118,4 @@ if (failures.length > 0) {
 }
 
 console.log("Preflight Discloud ok.");
-console.log("DISCORD_TOKEN e DATABASE_URL estao presentes, sem exibir valores.");
+console.log("DISCORD_TOKEN e DATABASE_URL estão presentes, sem exibir valores.");

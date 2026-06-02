@@ -32,11 +32,11 @@ const PLAYER_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "chakra",
-    description: "Mostra como o Chakra e calculado neste servidor."
+    description: "Mostra como o Chakra é calculado neste servidor."
   },
   {
     command: "ping",
-    description: "Confirma se o bot esta respondendo."
+    description: "Confirma se o bot está respondendo."
   },
   {
     command: "guia",
@@ -48,17 +48,17 @@ const PLAYER_COMMANDS: HelpCommandEntry[] = [
 const STAFF_COMMANDS: HelpCommandEntry[] = [
   {
     command: "setup",
-    description: "Cria ou atualiza os dados padrao do RPG no servidor.",
+    description: "Cria ou atualiza os dados padrão do RPG no servidor.",
     aliases: "iniciar"
   },
   {
     command: "config",
-    description: "Painel tecnico do servidor: prefixo, canal de logs e resumo das configuracoes.",
+    description: "Painel técnico do servidor: prefixo, canal de logs e resumo das configurações.",
     aliases: "cfg"
   },
   {
     command: "atributo",
-    description: "Painel de atributos: cria, edita, remove e configura a formula de Chakra.",
+    description: "Painel de atributos: cria, edita, remove e configura a fórmula de Chakra.",
     aliases: "attr"
   }
 ];
@@ -66,7 +66,7 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
 export function buildHelpPanel(prefix: string, page: HelpPage = "home") {
   return {
     embeds: [buildHelpEmbed(prefix, page)],
-    components: [buildHelpSelect(page)]
+    components: [buildHelpSelect()]
   };
 }
 
@@ -74,7 +74,7 @@ export async function handleHelpInteraction(
   interaction: Interaction,
   services: CommandServices
 ): Promise<boolean> {
-  if (!interaction.isStringSelectMenu() || interaction.customId !== HELP_SELECT_ID) {
+  if (!interaction.isStringSelectMenu() || !interaction.customId.startsWith(HELP_SELECT_ID)) {
     return false;
   }
 
@@ -101,7 +101,7 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
       .setTitle("Guia da staff")
       .setDescription(formatCommandList(prefix, STAFF_COMMANDS))
       .addFields({
-        name: "Permissao",
+        name: "Permissão",
         value: "Comandos de staff exigem Administrador ou Gerenciar Servidor."
       });
   }
@@ -116,9 +116,9 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
         `Prefixo atual: \`${prefix}\``,
         "",
         "**Jogador** mostra ficha, atributos e Chakra.",
-        "**Staff** mostra configuracoes e paineis administrativos.",
+        "**Staff** mostra configurações e painéis administrativos.",
         "",
-        "Comandos com muitas funcoes usam menus. Atalhos por texto existem so para manutencao."
+        "Comandos com muitas funções usam menus. Atalhos por texto existem só para manutenção."
       ].join("\n")
     )
     .addFields(
@@ -127,27 +127,24 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
     );
 }
 
-function buildHelpSelect(activePage: HelpPage): ActionRowBuilder<StringSelectMenuBuilder> {
+function buildHelpSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(HELP_SELECT_ID)
+      .setCustomId(`${HELP_SELECT_ID}:${Date.now().toString(36)}`)
       .setPlaceholder("Escolha uma categoria")
       .addOptions(
         new StringSelectMenuOptionBuilder()
-          .setLabel("Inicio")
+          .setLabel("Início")
           .setDescription("Resumo do guia e quantidade de comandos.")
-          .setValue("home")
-          .setDefault(activePage === "home"),
+          .setValue("home"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Jogador")
-          .setDescription("Ficha, atributos, Chakra e comandos publicos.")
-          .setValue("player")
-          .setDefault(activePage === "player"),
+          .setDescription("Ficha, atributos, Chakra e comandos públicos.")
+          .setValue("player"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Staff")
-          .setDescription("Setup, configuracoes e paineis administrativos.")
+          .setDescription("Setup, configurações e painéis administrativos.")
           .setValue("staff")
-          .setDefault(activePage === "staff")
       )
   );
 }

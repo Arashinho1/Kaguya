@@ -15,7 +15,7 @@ import {
 function usage(prefix: string): string {
   return [
     `\`${prefix}atributo listar\``,
-    `\`${prefix}atributo criar chave | Nome | base | min | max | descricao\``,
+    `\`${prefix}atributo criar chave | Nome | base | min | max | descrição\``,
     `\`${prefix}atributo editar chave campo valor\``,
     `\`${prefix}atributo ativar chave\``,
     `\`${prefix}atributo desativar chave\``,
@@ -33,7 +33,7 @@ export const attributeCommand: PrefixCommand = {
   aliases: ["attr"],
   staffOnly: true,
   description: "Configura atributos do RPG neste servidor.",
-  usage: ".atributo | .atributo criar forca | Forca | 0 | 0 | 100",
+  usage: ".atributo | .atributo criar forca | Força | 0 | 0 | 100",
   async execute({ message, args, prefix, services }) {
     const subcommand = args.shift()?.toLowerCase();
 
@@ -47,7 +47,7 @@ export const attributeCommand: PrefixCommand = {
         embeds: [
           new EmbedBuilder()
             .setColor(0x2b6cb0)
-            .setTitle("Configuracao de atributos")
+            .setTitle("Configuração de atributos")
             .setDescription(usage(prefix))
         ]
       });
@@ -62,7 +62,7 @@ export const attributeCommand: PrefixCommand = {
           embeds: [
             new EmbedBuilder()
               .setColor(0x805ad5)
-              .setTitle("Formula de Chakra")
+              .setTitle("Fórmula de Chakra")
               .setDescription(`\`${formatChakraFormula(formula)}\``)
               .addFields({
                 name: "Como configurar",
@@ -89,7 +89,7 @@ export const attributeCommand: PrefixCommand = {
         isolatedMultiplier === null
       ) {
         await message.reply(
-          `Use \`${prefix}atributo chakra forca,velocidade,resistencia | 1 | 0 | 1\`. Ordem: atributos | multiplicador da soma | bonus direto | multiplicador isolado.`
+          `Use \`${prefix}atributo chakra forca,velocidade,resistencia | 1 | 0 | 1\`. Ordem: atributos | multiplicador da soma | bônus direto | multiplicador isolado.`
         );
         return;
       }
@@ -102,10 +102,10 @@ export const attributeCommand: PrefixCommand = {
       });
 
       await sendStaffLog(message, services, {
-        title: "Formula de chakra atualizada",
-        description: `Nova formula: \`${formatChakraFormula(formula)}\`.`
+        title: "Fórmula de chakra atualizada",
+        description: `Nova fórmula: \`${formatChakraFormula(formula)}\`.`
       });
-      await message.reply(`Formula de chakra atualizada: \`${formatChakraFormula(formula)}\`.`);
+      await message.reply(`Fórmula de chakra atualizada: \`${formatChakraFormula(formula)}\`.`);
       return;
     }
 
@@ -151,14 +151,14 @@ export const attributeCommand: PrefixCommand = {
       }
 
       if (maxValue !== null && maxValue < minValue) {
-        await message.reply("O valor maximo nao pode ser menor que o minimo.");
+        await message.reply("O valor máximo não pode ser menor que o mínimo.");
         return;
       }
 
       const existing = await services.attributes.findAttribute(message.guild, key);
 
       if (existing) {
-        await message.reply(`Ja existe um atributo com a chave \`${key}\`.`);
+        await message.reply(`Já existe um atributo com a chave \`${key}\`.`);
         return;
       }
 
@@ -194,7 +194,7 @@ export const attributeCommand: PrefixCommand = {
           return { name: value };
         }
 
-        if (["descricao", "desc"].includes(field)) {
+        if (["descricao", "descrição", "desc"].includes(field)) {
           return { description: ["-", "limpar", "null"].includes(value.toLowerCase()) ? null : value };
         }
 
@@ -203,12 +203,12 @@ export const attributeCommand: PrefixCommand = {
           return parsed === null ? null : { baseValue: parsed };
         }
 
-        if (["min", "minimo"].includes(field)) {
+        if (["min", "minimo", "mínimo"].includes(field)) {
           const parsed = parseInteger(value);
           return parsed === null ? null : { minValue: parsed };
         }
 
-        if (["max", "maximo"].includes(field)) {
+        if (["max", "maximo", "máximo"].includes(field)) {
           const parsed = parseOptionalInteger(value);
           return parsed === undefined ? null : { maxValue: parsed };
         }
@@ -222,19 +222,19 @@ export const attributeCommand: PrefixCommand = {
       })();
 
       if (update === undefined) {
-        await message.reply("Campo desconhecido. Campos: nome, descricao, base, min, max, ordem.");
+        await message.reply("Campo desconhecido. Campos: nome, descrição, base, min, max, ordem.");
         return;
       }
 
       if (update === null) {
-        await message.reply("Valor invalido para esse campo.");
+        await message.reply("Valor inválido para esse campo.");
         return;
       }
 
       const updated = await services.attributes.updateAttribute(message.guild, message.author.id, key, update);
 
       if (!updated) {
-        await message.reply(`Nao encontrei atributo com chave \`${key}\`.`);
+        await message.reply(`Não encontrei atributo com chave \`${key}\`.`);
         return;
       }
 
@@ -262,7 +262,7 @@ export const attributeCommand: PrefixCommand = {
       );
 
       if (!updated) {
-        await message.reply(`Nao encontrei atributo com chave \`${key}\`.`);
+        await message.reply(`Não encontrei atributo com chave \`${key}\`.`);
         return;
       }
 
@@ -286,7 +286,7 @@ export const attributeCommand: PrefixCommand = {
       const deleted = await services.attributes.deleteAttribute(message.guild, message.author.id, key);
 
       if (!deleted) {
-        await message.reply(`Nao encontrei atributo com chave \`${key}\`.`);
+        await message.reply(`Não encontrei atributo com chave \`${key}\`.`);
         return;
       }
 

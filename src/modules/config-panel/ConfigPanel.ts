@@ -10,6 +10,7 @@ import {
   type Guild,
   type Interaction,
   type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
   type User
 } from "discord.js";
 
@@ -30,7 +31,7 @@ export async function buildConfigPanel(
 ) {
   return {
     embeds: [await buildConfigEmbed(services, guild, prefix, page)],
-    components: [buildConfigSelect(page)]
+    components: [buildConfigSelect()]
   };
 }
 
@@ -47,12 +48,12 @@ export async function handleConfigInteraction(
   }
 
   if (!interaction.inCachedGuild()) {
-    await replyPrivately(interaction, "Esse painel so pode ser usado dentro de um servidor.");
+    await replyPrivately(interaction, "Esse painel só pode ser usado dentro de um servidor.");
     return true;
   }
 
   if (!hasManageGuildPermission(interaction.memberPermissions)) {
-    await replyPrivately(interaction, "Voce precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
+    await replyPrivately(interaction, "Você precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
     return true;
   }
 
@@ -61,12 +62,14 @@ export async function handleConfigInteraction(
 
     if (action === "prefix") {
       const currentPrefix = await services.guildConfig.getPrefix(interaction.guild).catch(() => ".");
+      await resetConfigMenu(interaction, services);
       await interaction.showModal(buildPrefixModal(currentPrefix));
       return true;
     }
 
     if (action === "logs") {
       const logChannelId = await services.guildConfig.getLogChannelId(interaction.guild).catch(() => null);
+      await resetConfigMenu(interaction, services);
       await interaction.showModal(buildLogChannelModal(logChannelId));
       return true;
     }
@@ -101,18 +104,18 @@ async function buildConfigEmbed(
 
   const embed = new EmbedBuilder()
     .setColor(0x2b6cb0)
-    .setTitle("Painel de configuracao")
+    .setTitle("Painel de configuração")
     .setDescription(
       [
-        "Configuracoes tecnicas do RPG neste servidor.",
-        "Tudo aqui e salvo por servidor e pode ser ajustado sem mexer no codigo.",
+        "Configurações técnicas do RPG neste servidor.",
+        "Tudo aqui é salvo por servidor e pode ser ajustado sem mexer no código.",
         "",
         `Prefixo atual: \`${overview.prefix}\``,
-        `Canal de logs: ${logChannelId ? `<#${logChannelId}>` : "nao configurado"}`
+        `Canal de logs: ${logChannelId ? `<#${logChannelId}>` : "não configurado"}`
       ].join("\n")
     )
     .addFields(
-      { name: "Configuracoes", value: String(overview.settingsCount), inline: true },
+      { name: "Configurações", value: String(overview.settingsCount), inline: true },
       { name: "Atributos", value: String(overview.attributesCount), inline: true },
       { name: "Ranks", value: String(overview.ranksCount), inline: true },
       { name: "Tipos de jutsu", value: String(overview.jutsuTypesCount), inline: true }
@@ -121,16 +124,16 @@ async function buildConfigEmbed(
   if (page === "prefix") {
     embed.addFields({
       name: "Prefixo",
-      value: "Use a opcao `Alterar prefixo` na lista suspensa. O prefixo precisa ter 1 a 5 caracteres, sem espacos."
+      value: "Use a opção `Alterar prefixo` na lista suspensa. O prefixo precisa ter 1 a 5 caracteres, sem espaços."
     });
   } else if (page === "logs") {
     embed.addFields({
       name: "Logs",
-      value: "Use a opcao `Canal de logs` na lista suspensa. Aceita mencao do canal ou ID."
+      value: "Use a opção `Canal de logs` na lista suspensa. Aceita menção do canal ou ID."
     });
   } else {
     embed.addFields({
-      name: "Acoes disponiveis",
+      name: "Ações disponíveis",
       value: [
         "Use a lista suspensa para alterar prefixo ou canal de logs.",
         `Atalhos ainda funcionam: \`${prefix}config prefix .\` e \`${prefix}config log #canal\`.`
@@ -141,27 +144,35 @@ async function buildConfigEmbed(
   return embed;
 }
 
-function buildConfigSelect(activePage: ConfigPage): ActionRowBuilder<StringSelectMenuBuilder> {
+async function resetConfigMenu(
+  interaction: StringSelectMenuInteraction<"cached">,
+  services: CommandServices
+): Promise<void> {
+  const prefix = await services.guildConfig.getPrefix(interaction.guild).catch(() => ".");
+
+  await interaction.message
+    .edit(await buildConfigPanel(services, interaction.guild, prefix, "overview"))
+    .catch(() => undefined);
+}
+
+function buildConfigSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(CONFIG_SELECT_ID)
-      .setPlaceholder("Escolha uma configuracao")
+      .setCustomId(`${CONFIG_SELECT_ID}:${Date.now().toString(36)}`)
+      .setPlaceholder("Escolha uma configuração")
       .addOptions(
         new StringSelectMenuOptionBuilder()
-          .setLabel("Visao geral")
-          .setDescription("Resumo tecnico do servidor no bot.")
-          .setValue("overview")
-          .setDefault(activePage === "overview"),
+          .setLabel("Visão geral")
+          .setDescription("Resumo técnico do servidor no bot.")
+          .setValue("overview"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Alterar prefixo")
           .setDescription("Muda o prefixo usado pelos comandos.")
-          .setValue("prefix")
-          .setDefault(activePage === "prefix"),
+          .setValue("prefix"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Canal de logs")
-          .setDescription("Define onde alteracoes administrativas serao registradas.")
+          .setDescription("Define onde alterações administrativas serão registradas.")
           .setValue("logs")
-          .setDefault(activePage === "logs")
       )
   );
 }
@@ -214,7 +225,7 @@ async function handleConfigModal(
     const nextPrefix = normalizePrefix(interaction.fields.getTextInputValue("prefix"));
 
     if (!nextPrefix) {
-      await interaction.editReply("Informe um prefixo com 1 a 5 caracteres, sem espacos.");
+      await interaction.editReply("Informe um prefixo com 1 a 5 caracteres, sem espaços.");
       return;
     }
 
@@ -232,21 +243,21 @@ async function handleConfigModal(
     const channelId = rawChannel.replace(/\D/g, "");
 
     if (!channelId) {
-      await interaction.editReply("Informe uma mencao ou ID de canal valido.");
+      await interaction.editReply("Informe uma menção ou ID de canal válido.");
       return;
     }
 
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
 
     if (!channel || !channel.isTextBased()) {
-      await interaction.editReply("Esse canal nao parece ser um canal de texto valido.");
+      await interaction.editReply("Esse canal não parece ser um canal de texto válido.");
       return;
     }
 
     await services.guildConfig.setLogChannel(interaction.guild, interaction.user.id, channel.id);
     await sendConfigLog(interaction.guild, interaction.user, services, {
       title: "Canal de logs configurado",
-      description: `O canal de logs agora e <#${channel.id}>.`
+      description: `O canal de logs agora é <#${channel.id}>.`
     });
     await interaction.editReply(`Canal de logs configurado: <#${channel.id}>.`);
     return;

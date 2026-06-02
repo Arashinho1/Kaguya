@@ -55,7 +55,7 @@ export async function buildAttributePanel(
         .setTitle("Painel de atributos")
         .setDescription(
           [
-            "Configure os atributos deste RPG sem mexer no codigo.",
+            "Configure os atributos deste RPG sem mexer no código.",
             "",
             `Ativos: **${activeCount}** | Total: **${attributes.length}**`,
             "",
@@ -68,7 +68,7 @@ export async function buildAttributePanel(
           name: "Atalhos por texto",
           value: [
             `\`${prefix}atributo listar\``,
-            `\`${prefix}atributo criar chave | Nome | base | min | max | descricao\``,
+            `\`${prefix}atributo criar chave | Nome | base | min | max | descrição\``,
             `\`${prefix}atributo chakra\``
           ].join("\n")
         })
@@ -95,7 +95,7 @@ export async function buildAttributePanel(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`${CUSTOM_ID_PREFIX}:chakra`)
-          .setLabel("Formula de chakra")
+          .setLabel("Fórmula de chakra")
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(`${CUSTOM_ID_PREFIX}:delete`)
@@ -119,12 +119,12 @@ export async function handleAttributeInteraction(
   }
 
   if (!interaction.inCachedGuild()) {
-    await replyPrivately(interaction, "Esse painel so pode ser usado dentro de um servidor.");
+    await replyPrivately(interaction, "Esse painel só pode ser usado dentro de um servidor.");
     return true;
   }
 
   if (!hasManageGuildPermission(interaction.memberPermissions)) {
-    await replyPrivately(interaction, "Voce precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
+    await replyPrivately(interaction, "Você precisa ter Administrador ou Gerenciar Servidor para usar esse painel.");
     return true;
   }
 
@@ -164,7 +164,7 @@ async function handleAttributeButton(
                   )
                   .join("\n\n")
           )
-          .addFields({ name: "Formula de Chakra", value: `\`${formatChakraFormula(formula)}\`` })
+          .addFields({ name: "Fórmula de Chakra", value: `\`${formatChakraFormula(formula)}\`` })
       ],
       flags: MessageFlags.Ephemeral
     });
@@ -198,7 +198,7 @@ async function handleAttributeButton(
   }
 
   await interaction.reply({
-    content: "Acao desconhecida nesse painel.",
+    content: "Ação desconhecida nesse painel.",
     flags: MessageFlags.Ephemeral
   });
 }
@@ -227,14 +227,14 @@ async function handleAttributeModal(
     }
 
     if (maxValue !== null && maxValue < minValue) {
-      await interaction.editReply("O valor maximo nao pode ser menor que o minimo.");
+      await interaction.editReply("O valor máximo não pode ser menor que o mínimo.");
       return;
     }
 
     const existing = await services.attributes.findAttribute(interaction.guild, key);
 
     if (existing) {
-      await interaction.editReply(`Ja existe um atributo com a chave \`${key}\`.`);
+      await interaction.editReply(`Já existe um atributo com a chave \`${key}\`.`);
       return;
     }
 
@@ -263,7 +263,7 @@ async function handleAttributeModal(
     const descriptionText = interaction.fields.getTextInputValue("description").trim();
 
     if (!key) {
-      await interaction.editReply("Informe uma chave valida.");
+      await interaction.editReply("Informe uma chave válida.");
       return;
     }
 
@@ -294,22 +294,22 @@ async function handleAttributeModal(
       const sortOrder = parseInteger(values[3]);
 
       if (values[0] && baseValue === null) {
-        await interaction.editReply("Base invalida.");
+        await interaction.editReply("Base inválida.");
         return;
       }
 
       if (values[1] && minValue === null) {
-        await interaction.editReply("Minimo invalido.");
+        await interaction.editReply("Mínimo inválido.");
         return;
       }
 
       if (maxValue === undefined) {
-        await interaction.editReply("Maximo invalido.");
+        await interaction.editReply("Máximo inválido.");
         return;
       }
 
       if (values[3] && sortOrder === null) {
-        await interaction.editReply("Ordem invalida.");
+        await interaction.editReply("Ordem inválida.");
         return;
       }
 
@@ -343,7 +343,7 @@ async function handleAttributeModal(
     );
 
     if (!updated) {
-      await interaction.editReply(`Nao encontrei atributo com chave \`${key}\`.`);
+      await interaction.editReply(`Não encontrei atributo com chave \`${key}\`.`);
       return;
     }
 
@@ -373,7 +373,7 @@ async function handleAttributeModal(
     );
 
     if (!updated) {
-      await interaction.editReply(`Nao encontrei atributo com chave \`${key}\`.`);
+      await interaction.editReply(`Não encontrei atributo com chave \`${key}\`.`);
       return;
     }
 
@@ -397,7 +397,7 @@ async function handleAttributeModal(
     const deleted = await services.attributes.deleteAttribute(interaction.guild, interaction.user.id, key);
 
     if (!deleted) {
-      await interaction.editReply(`Nao encontrei atributo com chave \`${key}\`.`);
+      await interaction.editReply(`Não encontrei atributo com chave \`${key}\`.`);
       return;
     }
 
@@ -427,7 +427,7 @@ async function handleAttributeModal(
       directBonus === null
     ) {
       await interaction.editReply(
-        "Preencha atributos, multiplicadores no formato `multiplicador_soma | multiplicador_isolado` e bonus direto."
+        "Preencha atributos, multiplicadores no formato `multiplicador_soma | multiplicador_isolado` e bônus direto."
       );
       return;
     }
@@ -440,10 +440,10 @@ async function handleAttributeModal(
     });
 
     await sendStaffLogForGuild(interaction.guild, interaction.user, services, {
-      title: "Formula de chakra atualizada",
-      description: `Nova formula: \`${formatChakraFormula(formula)}\`.`
+      title: "Fórmula de chakra atualizada",
+      description: `Nova fórmula: \`${formatChakraFormula(formula)}\`.`
     });
-    await interaction.editReply(`Formula de chakra atualizada: \`${formatChakraFormula(formula)}\`.`);
+    await interaction.editReply(`Fórmula de chakra atualizada: \`${formatChakraFormula(formula)}\`.`);
     return;
   }
 
@@ -456,9 +456,9 @@ function buildCreateAttributeModal(): ModalBuilder {
     .setTitle("Criar atributo")
     .addComponents(
       textInputRow("key", "Chave", "forca", TextInputStyle.Short, true),
-      textInputRow("name", "Nome", "Forca", TextInputStyle.Short, true),
+      textInputRow("name", "Nome", "Força", TextInputStyle.Short, true),
       textInputRow("values", "Base | Min | Max | Ordem", "0 | 0 | 100 | 10", TextInputStyle.Short, true),
-      textInputRow("description", "Descricao", "Atributo fisico base.", TextInputStyle.Paragraph, false)
+      textInputRow("description", "Descrição", "Atributo físico base.", TextInputStyle.Paragraph, false)
     );
 }
 
@@ -468,9 +468,9 @@ function buildEditAttributeModal(): ModalBuilder {
     .setTitle("Editar atributo")
     .addComponents(
       textInputRow("key", "Chave", "forca", TextInputStyle.Short, true),
-      textInputRow("name", "Novo nome", "Forca", TextInputStyle.Short, false),
+      textInputRow("name", "Novo nome", "Força", TextInputStyle.Short, false),
       textInputRow("values", "Base | Min | Max | Ordem", "10 | 0 | 100 | 10", TextInputStyle.Short, false),
-      textInputRow("description", "Descricao (- para limpar)", "Nova descricao", TextInputStyle.Paragraph, false)
+      textInputRow("description", "Descrição (- para limpar)", "Nova descrição", TextInputStyle.Paragraph, false)
     );
 }
 
@@ -490,14 +490,14 @@ function buildDeleteAttributeModal(): ModalBuilder {
     .setTitle("Remover atributo")
     .addComponents(
       textInputRow("key", "Chave", "forca", TextInputStyle.Short, true),
-      textInputRow("confirmation", "Confirmacao", "confirmar", TextInputStyle.Short, true)
+      textInputRow("confirmation", "Confirmação", "confirmar", TextInputStyle.Short, true)
     );
 }
 
 function buildChakraFormulaModal(formula: ChakraFormula): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(`${CUSTOM_ID_PREFIX}:modal:chakra`)
-    .setTitle("Formula de chakra")
+    .setTitle("Fórmula de chakra")
     .addComponents(
       textInputRow(
         "sourceKeys",
@@ -517,7 +517,7 @@ function buildChakraFormulaModal(formula: ChakraFormula): ModalBuilder {
       ),
       textInputRow(
         "directBonus",
-        "Bonus direto no chakra",
+        "Bônus direto no chakra",
         "0",
         TextInputStyle.Short,
         true,
