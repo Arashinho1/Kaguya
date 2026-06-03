@@ -1,8 +1,9 @@
 /**
- * Gerador de cards de perfil para personagens do RPG.
- * Usa @napi-rs/canvas para renderizar uma imagem PNG estilo jogo Naruto.
+ * Gerador de cards de perfil — estética Naruto RPG.
+ * Fontes: Chakra Petch (Google Fonts / jsDelivr CDN, OFL license)
+ * Todos os assets são criados programaticamente ou baixados de CDNs públicas.
  */
-import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos públicos
@@ -29,32 +30,37 @@ export interface ProfileCardData {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Paleta de cores
+// Paleta Naruto RPG
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BG        = "#0c0c18";
-const PANEL     = "#13131f";
-const RED       = "#c0392b";
-const GOLD      = "#d4ac0d";
-const TEXT      = "#e8e8f0";
-const MUTED     = "#6a6a90";
-const DIMBAR    = "#1c1c2e";
-const FOOTERBG  = "#0a0a14";
+const C = {
+  bg:       "#080812",
+  panel:    "#0D0D1C",
+  border:   "#8B1A1A",
+  red:      "#C0392B",
+  orange:   "#E8690A",
+  gold:     "#D4A017",
+  goldL:    "#F1C232",
+  text:     "#F0F0FF",
+  muted:    "#5A5A88",
+  dimbar:   "#181828",
+  foot:     "#060610",
+  glow:     "#FF6B35",
+} as const;
 
-/** Gradiente [escuro, claro] por chave de atributo */
-const ATTR_COLOR: Record<string, [string, string]> = {
-  chakra:             ["#1a5276", "#2e86c1"],
-  forca:              ["#922b21", "#e74c3c"],
-  velocidade:         ["#b7950b", "#f4d03f"],
-  resistencia:        ["#1e8449", "#2ecc71"],
-  ninjutsu:           ["#6c3483", "#9b59b6"],
-  ninjutsu_elemental: ["#ba4a00", "#f0841c"],
-  taijutsu:           ["#922b21", "#e74c3c"],
-  genjutsu:           ["#117a65", "#1abc9c"],
+/** [dark, light, glow] por atributo */
+const ATTR: Record<string, [string, string, string]> = {
+  chakra:             ["#154360", "#2E86C1", "#5DADE2"],
+  forca:              ["#7B241C", "#E74C3C", "#FF6961"],
+  velocidade:         ["#9A7D0A", "#F4D03F", "#FFF176"],
+  resistencia:        ["#1D6A39", "#2ECC71", "#58D68D"],
+  ninjutsu:           ["#5B2C82", "#8E44AD", "#BB8FCE"],
+  ninjutsu_elemental: ["#943126", "#E67E22", "#F0A500"],
+  taijutsu:           ["#7B241C", "#CD6155", "#F1948A"],
+  genjutsu:           ["#0E6655", "#1ABC9C", "#48C9B0"],
 };
 
-/** Ícone unicode por chave de atributo */
-const ATTR_ICON: Record<string, string> = {
+const ICON: Record<string, string> = {
   chakra:             "◈",
   forca:              "⚔",
   velocidade:         "◎",
@@ -66,311 +72,506 @@ const ATTR_ICON: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dimensões do card
+// Dimensões
 // ─────────────────────────────────────────────────────────────────────────────
 
-const W  = 820;
-const H  = 430;
-const PW = 210;          // largura do painel de retrato
-const CX = PW + 28;      // início do conteúdo à direita
-const CW = W - CX - 16; // largura disponível para conteúdo
-const FOOTER_H = 28;
+const W = 820, H = 420;
+const PW = 210;             // largura painel esquerdo (retrato)
+const CX = PW + 24;         // X do conteúdo
+const CW = W - CX - 14;    // largura do conteúdo
+const FH = 26;              // altura do rodapé
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Carregamento de fontes (uma vez, cached)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let fontsReady = false;
+
+async function ensureFonts(): Promise<void> {
+  if (fontsReady) return;
+
+  const BASE = "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/chakrapetch";
+  const urls = [
+    `${BASE}/ChakraPetch-Regular.ttf`,
+    `${BASE}/ChakraPetch-SemiBold.ttf`,
+    `${BASE}/ChakraPetch-Bold.ttf`,
+  ];
+
+  try {
+    const buffers = await Promise.all(
+      urls.map(u => fetch(u).then(r => r.arrayBuffer()).then(ab => Buffer.from(ab)))
+    );
+    GlobalFonts.register(buffers[0], "ChakraPetch");
+    GlobalFonts.register(buffers[1], "ChakraPetch");
+    GlobalFonts.register(buffers[2], "ChakraPetch");
+    fontsReady = true;
+  } catch {
+    // Fallback silencioso — usará sans-serif do sistema
+  }
+}
+
+const FONT = (size: number, weight: "normal" | "600" | "bold" = "normal") =>
+  `${weight} ${size}px ${fontsReady ? "ChakraPetch" : "sans-serif"}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Função principal
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function generateProfileCard(data: ProfileCardData): Promise<Buffer> {
+  await ensureFonts();
+
   const canvas = createCanvas(W, H);
-  const ctx = canvas.getContext("2d");
+  const ctx    = canvas.getContext("2d");
 
   drawBackground(ctx);
+  drawSealPattern(ctx);
+  drawEnergyAccents(ctx);
   drawLeftPanel(ctx);
   await drawPortrait(ctx, data.imageUrl);
+  drawPortraitOrnaments(ctx);
   drawStatusBadge(ctx, data.isActive);
   drawContent(ctx, data);
   drawFooter(ctx, data.ownerTag);
+  drawVignette(ctx);
 
   return canvas.toBuffer("image/png");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seções do card
+// Camadas de fundo
 // ─────────────────────────────────────────────────────────────────────────────
 
 function drawBackground(ctx: SKRSContext2D) {
-  ctx.fillStyle = BG;
+  ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Grade sutil
-  ctx.strokeStyle = "rgba(255,255,255,0.018)";
+  // Grade hexagonal sutil
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,120,30,0.06)";
   ctx.lineWidth = 1;
-  for (let x = 0; x < W; x += 24) {
+  const step = 28;
+  for (let x = 0; x < W + step; x += step) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
   }
-  for (let y = 0; y < H; y += 24) {
+  for (let y = 0; y < H + step; y += step) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
+  ctx.restore();
 
-  // Borda externa
-  ctx.strokeStyle = RED;
-  ctx.lineWidth = 2;
+  // Borda externa dupla
+  ctx.save();
+  ctx.strokeStyle = C.border;
+  ctx.lineWidth = 3;
   ctx.strokeRect(1, 1, W - 2, H - 2);
+  ctx.strokeStyle = "rgba(192,57,43,0.3)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(4, 4, W - 8, H - 8);
+  ctx.restore();
 }
 
+function drawSealPattern(ctx: SKRSContext2D) {
+  // Selo fuinjutsu no canto inferior direito
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.strokeStyle = C.orange;
+  ctx.lineWidth = 1;
+  const ox = W - 55, oy = H - 55;
+
+  for (let r = 15; r <= 180; r += 22) {
+    ctx.beginPath();
+    ctx.arc(ox, oy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(ox + Math.cos(a) * 180, oy + Math.sin(a) * 180);
+    ctx.stroke();
+  }
+
+  // Selo menor no canto superior esquerdo (fora do painel)
+  ctx.globalAlpha = 0.05;
+  const ox2 = 15, oy2 = 15;
+  for (let r = 10; r <= 60; r += 15) {
+    ctx.beginPath();
+    ctx.arc(ox2, oy2, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawEnergyAccents(ctx: SKRSContext2D) {
+  ctx.save();
+
+  // Glow laranja no canto superior direito
+  const grad1 = ctx.createRadialGradient(W, 0, 0, W, 0, 260);
+  grad1.addColorStop(0, "rgba(232,105,10,0.12)");
+  grad1.addColorStop(1, "rgba(232,105,10,0)");
+  ctx.fillStyle = grad1;
+  ctx.fillRect(0, 0, W, H);
+
+  // Linhas de energia diagonais (top-right)
+  ctx.strokeStyle = "rgba(232,105,10,0.08)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 5; i++) {
+    const ox = W - 100 + i * 18;
+    ctx.beginPath();
+    ctx.moveTo(ox, 0);
+    ctx.lineTo(ox - 80, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawVignette(ctx: SKRSContext2D) {
+  const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, W * 0.85);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(1, "rgba(0,0,10,0.55)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Painel esquerdo — retrato
+// ─────────────────────────────────────────────────────────────────────────────
+
 function drawLeftPanel(ctx: SKRSContext2D) {
-  ctx.fillStyle = PANEL;
+  // Fundo levemente diferente
+  const panelGrad = ctx.createLinearGradient(0, 0, PW, 0);
+  panelGrad.addColorStop(0, "#0A0A18");
+  panelGrad.addColorStop(1, C.panel);
+  ctx.fillStyle = panelGrad;
   ctx.fillRect(0, 0, PW, H);
 
-  // Separador vermelho vertical
-  ctx.fillStyle = RED;
+  // Separador vertical com glow
+  ctx.fillStyle = C.red;
   ctx.fillRect(PW - 2, 0, 2, H);
+
+  // Glow no separador
+  const sepGlow = ctx.createLinearGradient(PW - 8, 0, PW, 0);
+  sepGlow.addColorStop(0, "rgba(192,57,43,0)");
+  sepGlow.addColorStop(1, "rgba(192,57,43,0.3)");
+  ctx.fillStyle = sepGlow;
+  ctx.fillRect(PW - 8, 0, 8, H);
 }
 
 async function drawPortrait(ctx: SKRSContext2D, imageUrl?: string) {
-  const margin = 10;
-  const px = margin, py = margin;
-  const pw = PW - margin * 2;
-  const ph = H - margin * 2 - FOOTER_H - 28;
+  const m = 12, r = 6;
+  const px = m, py = m;
+  const pw = PW - m * 2;
+  const ph = H - m * 2 - FH - 32;
 
-  // Placeholder escuro
-  const grad = ctx.createLinearGradient(px, py, px, py + ph);
-  grad.addColorStop(0, "#1a1a30");
-  grad.addColorStop(1, "#0a0a1a");
-  ctx.fillStyle = grad;
-  roundRect(ctx, px, py, pw, ph, 6);
+  // Fundo do retrato
+  const bgGrad = ctx.createLinearGradient(px, py, px, py + ph);
+  bgGrad.addColorStop(0, "#1A1A30");
+  bgGrad.addColorStop(1, "#080818");
+  ctx.fillStyle = bgGrad;
+  roundRect(ctx, px, py, pw, ph, r);
   ctx.fill();
 
-  // Imagem do personagem (se disponível)
   if (imageUrl) {
     try {
       const img = await loadImage(imageUrl);
       ctx.save();
-      roundRect(ctx, px, py, pw, ph, 6);
+      roundRect(ctx, px, py, pw, ph, r);
       ctx.clip();
-      // Calcular para cobrir mantendo proporção
       const scale = Math.max(pw / img.width, ph / img.height);
       const iw = img.width * scale, ih = img.height * scale;
-      const ix = px + (pw - iw) / 2, iy = py + (ph - ih) / 2;
-      ctx.drawImage(img, ix, iy, iw, ih);
+      ctx.drawImage(img, px + (pw - iw) / 2, py + (ph - ih) / 2, iw, ih);
+      // Gradiente escurecendo a parte inferior (para o badge ficar legível)
+      const overlay = ctx.createLinearGradient(px, py + ph * 0.6, px, py + ph);
+      overlay.addColorStop(0, "rgba(0,0,0,0)");
+      overlay.addColorStop(1, "rgba(0,0,0,0.6)");
+      ctx.fillStyle = overlay;
+      ctx.fillRect(px, py, pw, ph);
       ctx.restore();
     } catch {
-      // silheta placeholder
-      ctx.fillStyle = "#2a2a40";
-      ctx.beginPath();
-      ctx.arc(px + pw / 2, py + ph / 2 - 20, 38, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(px + pw / 2 - 45, py + ph / 2 + 24, 90, 70);
+      // Silhueta fallback
+      ctx.save();
+      ctx.fillStyle = "#22224A";
+      ctx.beginPath(); ctx.arc(px + pw / 2, py + ph * 0.38, 36, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(px + pw / 2 - 44, py + ph * 0.62, 88, 68);
+      ctx.restore();
     }
   }
 
-  // Borda do retrato
-  ctx.strokeStyle = RED;
-  ctx.lineWidth = 2;
-  roundRect(ctx, px, py, pw, ph, 6);
+  // Borda do retrato com glow
+  ctx.save();
+  ctx.shadowColor = C.gold;
+  ctx.shadowBlur  = 8;
+  ctx.strokeStyle = C.gold;
+  ctx.lineWidth   = 2;
+  roundRect(ctx, px, py, pw, ph, r);
   ctx.stroke();
+  ctx.restore();
+}
 
-  // Marcadores de canto (decoração)
-  const cm = 6;
-  ctx.fillStyle = GOLD;
-  [
-    [px, py], [px + pw - cm, py],
-    [px, py + ph - cm], [px + pw - cm, py + ph - cm]
-  ].forEach(([cx, cy]) => ctx.fillRect(cx, cy, cm, cm));
+function drawPortraitOrnaments(ctx: SKRSContext2D) {
+  const m = 12, sz = 7;
+  const pw = PW - m * 2;
+  const ph = H - m * 2 - FH - 32;
+
+  // Losangos dourados nos 4 cantos
+  const corners: [number, number][] = [
+    [m, m], [m + pw, m],
+    [m, m + ph], [m + pw, m + ph]
+  ];
+  for (const [cx, cy] of corners) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(-sz / 4, -sz / 4, sz / 2, sz / 2);
+    ctx.restore();
+  }
+
+  // Marcadores de canto nas laterais (metade do retrato)
+  const halfY = m + (ph) / 2;
+  ctx.fillStyle = C.red;
+  ctx.fillRect(m - 3, halfY - 12, 3, 24);
+  ctx.fillRect(m + pw, halfY - 12, 3, 24);
 }
 
 function drawStatusBadge(ctx: SKRSContext2D, isActive: boolean) {
-  const margin = 10;
-  const pw = PW - margin * 2;
-  const by = H - FOOTER_H - margin - 22;
-  const bh = 22;
+  const m = 12;
+  const pw = PW - m * 2;
+  const by = H - FH - m - 24;
+  const bh = 24;
 
-  ctx.fillStyle = isActive ? "#1a5e38" : "#6d1a1a";
-  roundRect(ctx, margin, by, pw, bh, 4);
+  const bgColor  = isActive ? "#0D3B1F" : "#3B0D0D";
+  const fgColor  = isActive ? "#27AE60" : "#E74C3C";
+  const label    = isActive ? "● FICHA ATIVA" : "○ FICHA INATIVA";
+
+  ctx.save();
+  ctx.shadowColor = fgColor;
+  ctx.shadowBlur  = 6;
+  ctx.fillStyle   = bgColor;
+  roundRect(ctx, m, by, pw, bh, 4);
   ctx.fill();
-
-  ctx.strokeStyle = isActive ? "#2ecc71" : "#e74c3c";
-  ctx.lineWidth = 1;
-  roundRect(ctx, margin, by, pw, bh, 4);
+  ctx.strokeStyle = fgColor;
+  ctx.lineWidth   = 1;
+  roundRect(ctx, m, by, pw, bh, 4);
   ctx.stroke();
+  ctx.restore();
 
-  ctx.fillStyle = isActive ? "#2ecc71" : "#e74c3c";
-  ctx.font = "bold 11px sans-serif";
+  ctx.fillStyle = fgColor;
+  ctx.font      = FONT(11, "bold");
   ctx.textAlign = "center";
-  ctx.fillText(isActive ? "● FICHA ATIVA" : "○ FICHA INATIVA", margin + pw / 2, by + 15);
+  ctx.fillText(label, m + pw / 2, by + 16);
   ctx.textAlign = "left";
 }
 
-function drawContent(
-  ctx: SKRSContext2D,
-  data: ProfileCardData
-) {
-  let y = 26;
+// ─────────────────────────────────────────────────────────────────────────────
+// Conteúdo — lado direito
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // ── Nome do personagem ──────────────────────────────────────────────────────
-  ctx.fillStyle = GOLD;
-  ctx.font = "bold 26px sans-serif";
+function drawContent(ctx: SKRSContext2D, data: ProfileCardData) {
+  let y = 28;
+
+  // ── Nome ────────────────────────────────────────────────────────────────────
+  ctx.save();
+  ctx.shadowColor = C.gold;
+  ctx.shadowBlur  = 12;
+  ctx.fillStyle   = C.goldL;
+  ctx.font        = FONT(27, "bold");
   ctx.fillText(data.characterName, CX, y);
-  y += 20;
+  ctx.restore();
+  y += 22;
 
-  // Conceito
+  // Conceito (itálico, cor muted)
   if (data.concept) {
-    ctx.fillStyle = MUTED;
-    ctx.font = "italic 13px sans-serif";
-    ctx.fillText(data.concept.slice(0, 60), CX, y);
+    ctx.fillStyle = C.muted;
+    ctx.font      = `italic ${FONT(13)}`;
+    ctx.fillText(data.concept.slice(0, 62), CX, y);
     y += 16;
   }
 
-  // Divider
+  // Separador com glow laranja
   y += 6;
-  drawDivider(ctx, CX, y, CW, RED, 0.8);
-  y += 12;
-
-  // ── Identidade (3 colunas) ─────────────────────────────────────────────────
-  drawSectionLabel(ctx, "▸ IDENTIDADE", CX, y);
+  drawGlowLine(ctx, CX, y, CW, C.orange, 0.7);
   y += 14;
 
-  const idItems = [
-    { label: "Vila",  value: data.villageName ?? "—" },
-    { label: "Clã",   value: data.clanName    ?? "—" },
-    { label: "Rank",  value: data.rankName    ?? "—" },
+  // ── Identidade ──────────────────────────────────────────────────────────────
+  drawSectionLabel(ctx, "▸ IDENTIDADE", CX, y);
+  y += 15;
+
+  const id = [
+    { label: "Vila", value: data.villageName ?? "—" },
+    { label: "Clã",  value: data.clanName    ?? "—" },
+    { label: "Rank", value: data.rankName    ?? "—" },
   ];
-  const colW = CW / 3;
+  const icw = CW / 3;
 
-  for (let i = 0; i < idItems.length; i++) {
-    const ix = CX + i * colW;
-    ctx.fillStyle = MUTED;
-    ctx.font = "10px sans-serif";
-    ctx.fillText(idItems[i].label, ix, y);
-    ctx.fillStyle = TEXT;
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillText(idItems[i].value.slice(0, 18), ix, y + 14);
+  for (let i = 0; i < id.length; i++) {
+    const ix = CX + i * icw;
+    ctx.fillStyle = C.muted;
+    ctx.font      = FONT(9, "normal");
+    ctx.fillText(id[i].label, ix, y);
+    ctx.fillStyle = C.text;
+    ctx.font      = FONT(13, "bold");
+    ctx.fillText(id[i].value.slice(0, 20), ix, y + 15);
   }
-  y += 32;
+  y += 35;
 
-  // Divider
-  drawDivider(ctx, CX, y, CW, "#2a2a4a");
-  y += 12;
+  // Separador
+  drawGlowLine(ctx, CX, y, CW, "#2A2A4A", 1);
+  y += 14;
 
-  // ── Atributos ──────────────────────────────────────────────────────────────
+  // ── Atributos ───────────────────────────────────────────────────────────────
   drawSectionLabel(ctx, "▸ ATRIBUTOS", CX, y);
   y += 14;
 
-  // Separar chakra dos demais
-  const ordered = [...data.attributes].sort((a, b) => a.sortOrder - b.sortOrder);
-  const chakra  = ordered.find(a => a.key === "chakra");
-  const others  = ordered.filter(a => a.key !== "chakra");
+  const ordered = [...data.attributes]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter(a => a.key !== "chakra");
+  const chakra = data.attributes.find(a => a.key === "chakra");
 
-  // 2 colunas para atributos normais
-  const COLS   = 2;
-  const barCol = (CW - 8) / COLS;
-  const BAR_H  = 7;
-  const ROW_H  = 30;
+  const COLS  = 2;
+  const colW  = (CW - 6) / COLS;
+  const BAR_H = 7;
+  const ROW_H = 30;
 
-  for (let i = 0; i < others.length; i++) {
-    const attr = others[i];
+  for (let i = 0; i < ordered.length; i++) {
+    const attr = ordered[i];
     const col  = i % COLS;
     const row  = Math.floor(i / COLS);
-    const ax   = CX + col * barCol + (col > 0 ? 8 : 0);
+    const ax   = CX + col * (colW + 6);
     const ay   = y + row * ROW_H;
-
-    drawAttributeBar(ctx, ax, ay, barCol - 8, BAR_H, attr);
+    drawAttrBar(ctx, ax, ay, colW - 4, BAR_H, attr);
   }
 
-  y += Math.ceil(others.length / COLS) * ROW_H + 4;
+  y += Math.ceil(ordered.length / COLS) * ROW_H + 6;
 
-  // Chakra full-width
+  // Chakra — largura total, destaque especial
   if (chakra) {
-    drawAttributeBar(ctx, CX, y, CW, BAR_H + 2, chakra, true);
+    drawGlowLine(ctx, CX, y - 4, CW, "#1A3A6B", 0.6);
+    drawAttrBar(ctx, CX, y, CW, BAR_H + 3, chakra, true);
   }
 }
 
-function drawFooter(ctx: SKRSContext2D, ownerTag: string) {
-  ctx.fillStyle = FOOTERBG;
-  ctx.fillRect(0, H - FOOTER_H, W, FOOTER_H);
-  ctx.fillStyle = "#2a2a3a";
-  ctx.fillRect(0, H - FOOTER_H, W, 1);
-
-  ctx.fillStyle = MUTED;
-  ctx.font = "10px sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(`Dono: ${ownerTag}`, 12, H - 9);
-
-  const now = new Date();
-  const ts  = now.toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit"
-  });
-  ctx.textAlign = "right";
-  ctx.fillText(ts, W - 12, H - 9);
-  ctx.textAlign = "left";
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers de desenho
-// ─────────────────────────────────────────────────────────────────────────────
-
-function drawAttributeBar(
+function drawAttrBar(
   ctx: SKRSContext2D,
-  x: number, y: number, w: number, barH: number,
+  x: number, y: number,
+  w: number, barH: number,
   attr: AttributeEntry,
-  fullWidth = false
+  highlight = false
 ) {
-  const ratio  = attr.maxValue > 0 ? Math.min(1, attr.value / attr.maxValue) : 0;
-  const [dark, light] = ATTR_COLOR[attr.key] ?? ["#444", "#888"];
-  const icon   = ATTR_ICON[attr.key] ?? "·";
-  const nameW  = fullWidth ? 110 : w * 0.55;
+  const ratio = attr.maxValue > 0 ? Math.min(1, attr.value / attr.maxValue) : 0;
+  const colors = ATTR[attr.key] ?? ["#444", "#888", "#aaa"];
+  const [dark, light, glow] = colors;
+  const icon = ICON[attr.key] ?? "·";
+  const labelSize = highlight ? 12 : 10;
+  const iconSize  = highlight ? 14 : 11;
 
-  // Ícone
+  // Ícone com cor do atributo
+  ctx.save();
   ctx.fillStyle = light;
-  ctx.font      = fullWidth ? "13px sans-serif" : "11px sans-serif";
+  ctx.font = FONT(iconSize);
   ctx.fillText(icon, x, y + 12);
+  ctx.restore();
 
   // Nome do atributo
-  ctx.fillStyle = fullWidth ? TEXT : MUTED;
-  ctx.font      = fullWidth ? "bold 12px sans-serif" : "10px sans-serif";
-  ctx.fillText(attr.name, x + 16, y + 12);
+  ctx.fillStyle = highlight ? C.text : C.muted;
+  ctx.font = FONT(labelSize, highlight ? "600" : "normal");
+  ctx.fillText(attr.name, x + 18, y + 12);
 
-  // Valor (alinhado à direita na coluna)
-  ctx.fillStyle = TEXT;
-  ctx.font      = "bold 11px sans-serif";
+  // Valor (alinhado à direita)
+  ctx.fillStyle = C.text;
+  ctx.font = FONT(labelSize, "bold");
   ctx.textAlign = "right";
   ctx.fillText(String(attr.value), x + w, y + 12);
   ctx.textAlign = "left";
 
-  // Barra fundo
-  ctx.fillStyle = DIMBAR;
-  roundRect(ctx, x, y + 16, w, barH, 3);
+  const barY = y + (highlight ? 18 : 17);
+
+  // Barra de fundo
+  ctx.fillStyle = C.dimbar;
+  roundRect(ctx, x, barY, w, barH, 3);
   ctx.fill();
 
-  // Barra preenchida
-  if (ratio > 0.001) {
-    const grad = ctx.createLinearGradient(x, 0, x + w * ratio, 0);
-    grad.addColorStop(0, dark);
-    grad.addColorStop(1, light);
-    ctx.fillStyle = grad;
-    roundRect(ctx, x, y + 16, w * ratio, barH, 3);
+  if (ratio > 0.005) {
+    const fw = w * ratio;
+
+    // Glow sob a barra
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    const glowGrad = ctx.createLinearGradient(x, 0, x + fw, 0);
+    glowGrad.addColorStop(0, glow);
+    glowGrad.addColorStop(1, glow);
+    ctx.fillStyle = glowGrad;
+    roundRect(ctx, x - 1, barY - 2, fw + 2, barH + 4, 4);
     ctx.fill();
+    ctx.restore();
+
+    // Barra principal com gradiente
+    const grad = ctx.createLinearGradient(x, 0, x + fw, 0);
+    grad.addColorStop(0, dark);
+    grad.addColorStop(0.6, light);
+    grad.addColorStop(1, glow);
+    ctx.fillStyle = grad;
+    roundRect(ctx, x, barY, fw, barH, 3);
+    ctx.fill();
+
+    // Reflexo no topo da barra
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#FFFFFF";
+    roundRect(ctx, x + 1, barY + 1, fw - 2, barH / 2 - 1, 2);
+    ctx.fill();
+    ctx.restore();
   }
-
-  void nameW; // evitar TS unused warning
 }
 
-function drawSectionLabel(
-  ctx: SKRSContext2D,
-  label: string, x: number, y: number
-) {
-  ctx.fillStyle = RED;
-  ctx.font      = "bold 10px sans-serif";
-  ctx.fillText(label, x, y);
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodapé
+// ─────────────────────────────────────────────────────────────────────────────
+
+function drawFooter(ctx: SKRSContext2D, ownerTag: string) {
+  ctx.fillStyle = C.foot;
+  ctx.fillRect(0, H - FH, W, FH);
+
+  // Linha separadora com glow
+  drawGlowLine(ctx, 0, H - FH, W, C.red, 0.5);
+
+  ctx.fillStyle = C.muted;
+  ctx.font = FONT(10);
+  ctx.textAlign = "left";
+  ctx.fillText(`Dono: ${ownerTag}`, 14, H - 8);
+
+  const ts = new Date().toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+  ctx.textAlign = "right";
+  ctx.fillText(ts, W - 10, H - 8);
+  ctx.textAlign = "left";
 }
 
-function drawDivider(
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function drawSectionLabel(ctx: SKRSContext2D, text: string, x: number, y: number) {
+  ctx.save();
+  ctx.fillStyle = C.orange;
+  ctx.font = FONT(10, "bold");
+  ctx.letterSpacing = "1px";
+  ctx.fillText(text, x, y);
+  ctx.letterSpacing = "0px";
+  ctx.restore();
+}
+
+function drawGlowLine(
   ctx: SKRSContext2D,
-  x: number, y: number, w: number, color: string, alpha = 1
+  x: number, y: number, w: number,
+  color: string, alpha = 1
 ) {
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = 4;
   ctx.fillStyle   = color;
   ctx.fillRect(x, y, w, 1);
   ctx.restore();
@@ -378,7 +579,9 @@ function drawDivider(
 
 function roundRect(
   ctx: SKRSContext2D,
-  x: number, y: number, w: number, h: number, r: number
+  x: number, y: number,
+  w: number, h: number,
+  r: number
 ) {
   if (w <= 0 || h <= 0) return;
   r = Math.min(r, w / 2, h / 2);
