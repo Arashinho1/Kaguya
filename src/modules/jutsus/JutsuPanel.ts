@@ -291,7 +291,7 @@ function buildJutsuComponents(
         .setCustomId(P + ":search:" + filterType + ":" + filterRank)
         .setLabel("🔍 Buscar").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(cid(0, "_", "_"))
+        .setCustomId(`${CUSTOM_ID_PREFIX}:clear`)
         .setLabel("✕ Limpar")
         .setStyle(hasFilter ? ButtonStyle.Danger : ButtonStyle.Secondary)
         .setDisabled(!hasFilter),
@@ -391,6 +391,13 @@ async function handleJutsuButton(
   if (action === "home") {
     await interaction.update(
       await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "home", 0, "_", "_")
+    );
+    return;
+  }
+
+  if (action === "clear") {
+    await interaction.update(
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "catalog", 0, "_", "_")
     );
     return;
   }
