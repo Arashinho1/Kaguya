@@ -158,19 +158,49 @@ export class JutsuService {
 
   public async listJutsusPaged(
     guild: Guild,
-    options: { skip?: number; take?: number; includeInactive?: boolean } = {}
+    options: {
+      skip?: number;
+      take?: number;
+      includeInactive?: boolean;
+      typeKey?: string;     // "_" = sem filtro
+      jutsuRank?: string;   // "_" = sem filtro
+      nameSearch?: string;  // texto livre
+    } = {}
   ): Promise<{ items: JutsuWithRelations[]; total: number }> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
-    const where = {
+
+    // Resolver type filter (key → id)
+    let typeId: string | undefined;
+    if (options.typeKey && options.typeKey !== "_") {
+      const type = await this.prisma.jutsuType.findFirst({
+        where: { guildId: rpgGuild.id, key: options.typeKey }
+      });
+      if (!type) return { items: [], total: 0 };
+      typeId = type.id;
+    }
+
+    const rank = options.jutsuRank && options.jutsuRank !== "_"
+      ? options.jutsuRank.toUpperCase()
+      : undefined;
+
+    const where: Prisma.JutsuDefinitionWhereInput = {
       guildId: rpgGuild.id,
-      ...(options.includeInactive ? {} : { isActive: true })
+      ...(options.includeInactive ? {} : { isActive: true }),
+      ...(typeId     ? { typeId }          : {}),
+      ...(rank       ? { jutsuRank: rank } : {}),
+      ...(options.nameSearch ? {
+        OR: [
+          { name: { contains: options.nameSearch, mode: "insensitive" } },
+          { key:  { contains: options.nameSearch, mode: "insensitive" } }
+        ]
+      } : {})
     };
 
     const [items, total] = await Promise.all([
       this.prisma.jutsuDefinition.findMany({
         where,
         include: JUTSU_INCLUDE,
-        orderBy: [{ requiredRank: { sortOrder: "asc" } }, { name: "asc" }],
+        orderBy: [{ jutsuRank: "asc" }, { name: "asc" }],
         skip: options.skip ?? 0,
         take: options.take
       }),

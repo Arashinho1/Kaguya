@@ -26,15 +26,36 @@ import type { CommandServices } from "../../types/command.js";
 const CUSTOM_ID_PREFIX = "kaguya:jutsus";
 const PAGE_SIZE = 6;
 
-type JutsuPage = "home" | "catalog" | "known";
+type JutsuPage = "home" | "catalog" | "known" | "admin";
 
-function parseAction(raw: string): { type: string; pageNum: number } {
-  const idx = raw.lastIndexOf(":");
-  if (idx === -1) return { type: raw, pageNum: 0 };
-  const maybeNum = parseInt(raw.slice(idx + 1), 10);
-  if (isNaN(maybeNum)) return { type: raw, pageNum: 0 };
-  return { type: raw.slice(0, idx), pageNum: maybeNum };
+// ─── State encoding: catalog:PAGE:TYPE:RANK ──────────────────────────────────
+// TYPE e RANK usam "_" para "sem filtro"
+
+interface ActionState {
+  type: string;
+  pageNum: number;
+  filterType: string;
+  filterRank: string;
 }
+
+function parseAction(raw: string): ActionState {
+  const parts = raw.split(":");
+  const type       = parts[0] ?? "home";
+  const pageNum    = parseInt(parts[1] ?? "0", 10) || 0;
+  const filterType = parts[2] ?? "_";
+  const filterRank = parts[3] ?? "_";
+  return { type, pageNum, filterType, filterRank };
+}
+
+/** Monta o customId de paginação do catálogo */
+function cid(page: number, fType: string, fRank: string): string {
+  return `${CUSTOM_ID_PREFIX}:catalog:${page}:${fType}:${fRank}`;
+}
+
+const RANK_LABELS: Record<string, string> = {
+  e: "Rank E", d: "Rank D", c: "Rank C",
+  b: "Rank B", a: "Rank A", s: "Rank S"
+};
 
 export async function buildJutsuPanel(
   services: CommandServices,
@@ -42,12 +63,25 @@ export async function buildJutsuPanel(
   user: User,
   canManage: boolean,
   page: JutsuPage = "home",
-  pageNum = 0
+  pageNum = 0,
+  filterType = "_",
+  filterRank = "_"
 ) {
-  const { embed, totalPages } = await buildJutsuEmbed(services, guild, user, page, pageNum);
+  const { embed, totalPages } = await buildJutsuEmbed(
+    services, guild, user, page, pageNum, filterType, filterRank
+  );
+
+  // Tipos de jutsu para o dropdown (só precisa no catálogo)
+  const jutsuTypes = page === "catalog"
+    ? await services.world.listJutsuTypes(guild).catch(() => [])
+    : [];
+
   return {
     embeds: [embed],
-    components: buildJutsuComponents(canManage, page, pageNum, totalPages)
+    components: buildJutsuComponents(
+      canManage, page, pageNum, totalPages,
+      filterType, filterRank, jutsuTypes
+    )
   };
 }
 
@@ -101,7 +135,9 @@ async function buildJutsuEmbed(
   guild: Guild,
   user: User,
   page: JutsuPage,
-  pageNum: number
+  pageNum: number,
+  filterType = "_",
+  filterRank = "_"
 ): Promise<{ embed: EmbedBuilder; totalPages: number }> {
   const overview = await services.jutsus.getOverview(guild, user);
 
@@ -126,14 +162,25 @@ async function buildJutsuEmbed(
     const safePage = Math.max(0, pageNum);
     const { items, total } = await services.jutsus.listJutsusPaged(guild, {
       skip: safePage * PAGE_SIZE,
-      take: PAGE_SIZE
+      take: PAGE_SIZE,
+      typeKey:   filterType,
+      jutsuRank: filterRank
     });
     totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const realPage = Math.min(safePage, totalPages - 1);
-    const pageLabel = totalPages > 1 ? ` — p. ${realPage + 1}/${totalPages}` : "";
+
+    // Labels dos filtros ativos
+    const rankLabel = filterRank !== "_" ? `Rank ${filterRank.toUpperCase()}` : null;
+    const filterLabel = [rankLabel].filter(Boolean).join(" · ");
+    const pageLabel   = totalPages > 1 ? ` — p. ${realPage + 1}/${totalPages}` : "";
+    const totalLabel  = `${total} jutsu${total !== 1 ? "s" : ""}`;
+    const fieldName   = filterLabel
+      ? `Catálogo — ${filterLabel} (${totalLabel})${pageLabel}`
+      : `Catálogo ativo (${totalLabel})${pageLabel}`;
+
     embed.addFields({
-      name: `Catálogo ativo${pageLabel}`,
-      value: formatJutsuList(services, items, "Nenhum jutsu ativo cadastrado.")
+      name:  fieldName,
+      value: formatJutsuList(services, items, "Nenhum jutsu encontrado com esses filtros.")
     });
   } else if (page === "known") {
     const safePage = Math.max(0, pageNum);
@@ -166,93 +213,151 @@ async function buildJutsuEmbed(
   return { embed, totalPages };
 }
 
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRow = ActionRowBuilder<any>;
+
 function buildJutsuComponents(
   canManage: boolean,
   page: JutsuPage,
   pageNum: number,
-  totalPages: number
-): ActionRowBuilder<ButtonBuilder>[] {
-  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+  totalPages: number,
+  filterType: string,
+  filterRank: string,
+  jutsuTypes: { key: string; name: string }[]
+): AnyRow[] {
+  const rows: AnyRow[] = [];
+  const P = CUSTOM_ID_PREFIX;
 
-  // Row 1 — navegação principal
-  // "Aprender" leva o pageNum no customId quando em catálogo, -1 quando fora
-  const learnId = page === "catalog"
-    ? `${CUSTOM_ID_PREFIX}:learn:${pageNum}`
-    : `${CUSTOM_ID_PREFIX}:learn:-1`;
+  // ── ADMIN ────────────────────────────────────────────────────────────────────
+  if (page === "admin") {
+    rows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(P + ":home").setLabel("← Voltar").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(P + ":create").setLabel("Criar jutsu").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(P + ":edit").setLabel("Editar").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(P + ":rules").setLabel("Requisitos").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(P + ":sync").setLabel("⬇ Importar").setStyle(ButtonStyle.Success)
+      )
+    );
+    rows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(P + ":chakra").setLabel("Ajustar Chakra de personagem").setStyle(ButtonStyle.Secondary)
+      )
+    );
+    return rows;
+  }
+
+  // ── HOME / KNOWN ─────────────────────────────────────────────────────────────
+  if (page === "home" || page === "known") {
+    const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(cid(0, "_", "_"))
+        .setLabel("Catálogo")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(P + ":known")
+        .setLabel("Meus jutsus")
+        .setStyle(page === "known" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+
+    // [Configurar] só para admins
+    if (canManage) {
+      navRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(P + ":admin")
+          .setLabel("⚙ Configurar")
+          .setStyle(ButtonStyle.Secondary)
+      );
+    }
+
+    rows.push(navRow);
+
+    if (page === "known" && totalPages > 1) {
+      rows.push(buildPaginationRow("known", pageNum, totalPages, "_", "_"));
+    }
+    return rows;
+  }
+
+  // ── CATALOG com filtros ──────────────────────────────────────────────────────
+  const hasFilter = filterType !== "_" || filterRank !== "_";
 
   rows.push(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:catalog`)
-        .setLabel("Catálogo")
-        .setStyle(page === "catalog" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        .setCustomId(P + ":home")
+        .setLabel("← Voltar").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:known`)
-        .setLabel("Meus jutsus")
-        .setStyle(page === "known" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        .setCustomId(P + ":search:" + filterType + ":" + filterRank)
+        .setLabel("🔍 Buscar").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(learnId)
-        .setLabel("Aprender")
-        .setStyle(ButtonStyle.Success),
+        .setCustomId(cid(0, "_", "_"))
+        .setLabel("✕ Limpar")
+        .setStyle(hasFilter ? ButtonStyle.Danger : ButtonStyle.Secondary)
+        .setDisabled(!hasFilter),
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:use`)
-        .setLabel("Usar")
-        .setStyle(ButtonStyle.Success)
+        .setCustomId(P + ":learn:" + pageNum + ":" + filterType + ":" + filterRank)
+        .setLabel("📖 Aprender").setStyle(ButtonStyle.Success)
     )
   );
 
-  // Row 2 — paginação (somente quando há múltiplas páginas)
-  if ((page === "catalog" || page === "known") && totalPages > 1) {
-    rows.push(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:${page}:${pageNum - 1}`)
-          .setLabel("◀")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageNum <= 0),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:_page`)
-          .setLabel(`${pageNum + 1} / ${totalPages}`)
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(true),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:${page}:${pageNum + 1}`)
-          .setLabel("▶")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageNum >= totalPages - 1)
-      )
+  // Dropdown de tipos
+  const typeOptions = [
+    new StringSelectMenuOptionBuilder().setValue("_").setLabel("Todos os tipos").setDefault(filterType === "_")
+  ];
+  for (const t of jutsuTypes.slice(0, 24)) {
+    typeOptions.push(
+      new StringSelectMenuOptionBuilder().setValue(t.key).setLabel(t.name).setDefault(filterType === t.key)
     );
   }
+  rows.push(
+    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(P + ":sel:type:" + filterRank)
+        .setPlaceholder("🏷 Filtrar por categoria...")
+        .addOptions(typeOptions)
+    )
+  );
 
-  // Row 3 — admin (somente para gestores)
-  if (canManage) {
-    rows.push(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:create`)
-          .setLabel("Criar")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:edit`)
-          .setLabel("Editar")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:rules`)
-          .setLabel("Requisitos")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:sync`)
-          .setLabel("⬇ Importar")
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`${CUSTOM_ID_PREFIX}:chakra`)
-          .setLabel("Chakra")
-          .setStyle(ButtonStyle.Secondary)
-      )
+  // Dropdown de rank
+  const rankOptions = [
+    new StringSelectMenuOptionBuilder().setValue("_").setLabel("Todos os ranks").setDefault(filterRank === "_")
+  ];
+  for (const [key, label] of Object.entries(RANK_LABELS)) {
+    rankOptions.push(
+      new StringSelectMenuOptionBuilder().setValue(key).setLabel(label).setDefault(filterRank === key)
     );
   }
+  rows.push(
+    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(P + ":sel:rank:" + filterType)
+        .setPlaceholder("⭐ Filtrar por rank...")
+        .addOptions(rankOptions)
+    )
+  );
+
+  if (totalPages > 1) rows.push(buildPaginationRow("catalog", pageNum, totalPages, filterType, filterRank));
 
   return rows;
+}
+
+function buildPaginationRow(
+  page: JutsuPage, pageNum: number, totalPages: number,
+  filterType: string, filterRank: string
+): ActionRowBuilder<ButtonBuilder> {
+  const P = CUSTOM_ID_PREFIX;
+  const prevId = page === "catalog"
+    ? cid(Math.max(0, pageNum - 1), filterType, filterRank)
+    : P + ":" + page + ":" + (pageNum - 1);
+  const nextId = page === "catalog"
+    ? cid(Math.min(totalPages - 1, pageNum + 1), filterType, filterRank)
+    : P + ":" + page + ":" + (pageNum + 1);
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(pageNum <= 0),
+    new ButtonBuilder().setCustomId(P + ":_page").setLabel((pageNum + 1) + " / " + totalPages).setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(pageNum >= totalPages - 1)
+  );
 }
 
 async function handleJutsuButton(
@@ -260,49 +365,70 @@ async function handleJutsuButton(
   services: CommandServices
 ): Promise<void> {
   const rawAction = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:`.length);
-  const { type: action, pageNum } = parseAction(rawAction);
+  const { type: action, pageNum, filterType, filterRank } = parseAction(rawAction);
   const canManage = await canManageJutsus(interaction, services);
 
   if (action === "_page") {
-    // botão de página atual (desativado) — não faz nada
     await interaction.deferUpdate();
     return;
   }
 
-  if (action === "catalog" || action === "known") {
+  // Navegação com filtros preservados
+  if (action === "catalog") {
     await interaction.update(
-      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, action, pageNum)
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "catalog", pageNum, filterType, filterRank)
+    );
+    return;
+  }
+
+  if (action === "known") {
+    await interaction.update(
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "known", pageNum, "_", "_")
     );
     return;
   }
 
   if (action === "home") {
     await interaction.update(
-      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "home", 0)
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "home", 0, "_", "_")
     );
     return;
   }
 
-  if (action === "learn") {
-    if (pageNum >= 0) {
-      // Catálogo: mostra select menu com os jutsus da página atual
-      const { items } = await services.jutsus.listJutsusPaged(interaction.guild, {
-        skip: pageNum * PAGE_SIZE,
-        take: PAGE_SIZE
-      });
-      if (items.length === 0) {
-        await interaction.reply({ content: "Nenhum jutsu nesta página do catálogo.", flags: MessageFlags.Ephemeral });
-        return;
-      }
-      await interaction.reply({
-        content: "Selecione o jutsu para aprender:",
-        components: [buildJutsuSelectMenu(items, `${CUSTOM_ID_PREFIX}:select:learn`)],
-        flags: MessageFlags.Ephemeral
-      });
-    } else {
-      // Fora do catálogo: modal de texto
-      await interaction.showModal(buildLearnJutsuModal());
+  if (action === "admin") {
+    if (!canManage) {
+      await interaction.reply({ content: "Você não tem permissão administrativa.", flags: MessageFlags.Ephemeral });
+      return;
     }
+    await interaction.update(
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "admin", 0, "_", "_")
+    );
+    return;
+  }
+
+  // Busca — abre modal
+  if (action === "search") {
+    await interaction.showModal(buildSearchModal(filterType, filterRank));
+    return;
+  }
+
+  // Aprender — mostra select com jutsus filtrados da página atual
+  if (action === "learn") {
+    const { items } = await services.jutsus.listJutsusPaged(interaction.guild, {
+      skip: pageNum * PAGE_SIZE,
+      take: PAGE_SIZE,
+      typeKey:   filterType,
+      jutsuRank: filterRank
+    });
+    if (items.length === 0) {
+      await interaction.reply({ content: "Nenhum jutsu visível para aprender. Ajuste os filtros.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.reply({
+      content: "Selecione o jutsu para aprender:",
+      components: [buildJutsuSelectMenu(items, `${CUSTOM_ID_PREFIX}:select:learn`)],
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
@@ -358,7 +484,7 @@ async function handleJutsuButton(
       title: "Jutsus sincronizados",
       description: `**${result.created}** jutsus importados do catálogo oficial. **${result.skipped}** já existiam.`
     });
-    await refreshJutsuMessage(interaction, services, "catalog", 0);
+    await refreshJutsuMessage(interaction, services, "admin", 0, "_", "_");
     await interaction.editReply(
       result.created > 0
         ? `Sincronização concluída: **${result.created}** jutsus importados, **${result.skipped}** já existiam.`
@@ -378,6 +504,54 @@ async function handleJutsuModal(
   services: CommandServices
 ): Promise<void> {
   const action = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:modal:`.length);
+
+  // ── Modal de busca ──────────────────────────────────────────────────────────
+  if (action.startsWith("search:")) {
+    const parts        = action.split(":");
+    const filterType   = parts[1] ?? "_";
+    const filterRank   = parts[2] ?? "_";
+    const query        = interaction.fields.getTextInputValue("query").trim();
+    const canManage    = await canManageJutsus(interaction, services);
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const { items, total } = await services.jutsus.listJutsusPaged(interaction.guild, {
+      nameSearch: query, typeKey: filterType, jutsuRank: filterRank, take: PAGE_SIZE
+    });
+
+    // Atualiza o painel principal com resultados filtrados
+    if (interaction.message) {
+      const embed = new EmbedBuilder()
+        .setColor(0x2f855a)
+        .setTitle("⚡ Jutsus — Resultados da busca")
+        .setDescription(`Busca: **"${query}"** — ${total} resultado${total !== 1 ? "s" : ""}`)
+        .addFields({
+          name: `Resultados (${Math.min(PAGE_SIZE, total)} de ${total})`,
+          value: formatJutsuList({ jutsus: { formatJutsu: (j: JutsuWithRelations) => services.jutsus.formatJutsu(j) } } as unknown as CommandServices, items, "Nenhum jutsu encontrado.")
+        });
+
+      const learnBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${CUSTOM_ID_PREFIX}:home`)
+          .setLabel("← Voltar ao catálogo")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`${CUSTOM_ID_PREFIX}:learn:0:${filterType}:${filterRank}`)
+          .setLabel("📖 Aprender")
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(items.length === 0)
+      );
+
+      await interaction.message.edit({ embeds: [embed], components: [learnBtn] }).catch(() => undefined);
+    }
+
+    await interaction.editReply(
+      total === 0
+        ? `Nenhum jutsu encontrado para **"${query}"**.`
+        : `Encontrado${total !== 1 ? "s" : ""} **${total}** jutsu${total !== 1 ? "s" : ""}. Veja acima.`
+    );
+    return;
+  }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -656,7 +830,31 @@ async function handleJutsuSelect(
   interaction: StringSelectMenuInteraction<"cached">,
   services: CommandServices
 ): Promise<void> {
-  const action = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:select:`.length);
+  const rawAction = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:`.length);
+  const canManage = await canManageJutsusSelect(interaction, services);
+
+  // ── Filtro de tipo ──────────────────────────────────────────────────────────
+  if (rawAction.startsWith("sel:type:")) {
+    const preservedRank = rawAction.slice("sel:type:".length) || "_";
+    const newType = interaction.values[0] ?? "_";
+    await interaction.update(
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "catalog", 0, newType, preservedRank)
+    );
+    return;
+  }
+
+  // ── Filtro de rank ──────────────────────────────────────────────────────────
+  if (rawAction.startsWith("sel:rank:")) {
+    const preservedType = rawAction.slice("sel:rank:".length) || "_";
+    const newRank = interaction.values[0] ?? "_";
+    await interaction.update(
+      await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "catalog", 0, preservedType, newRank)
+    );
+    return;
+  }
+
+  // ── Aprender / Usar ─────────────────────────────────────────────────────────
+  const action = rawAction.slice("select:".length);
   const selectedKey = interaction.values[0];
 
   await interaction.deferUpdate();
@@ -695,21 +893,47 @@ async function canManageJutsus(
   );
 }
 
+async function canManageJutsusSelect(
+  interaction: StringSelectMenuInteraction<"cached">,
+  services: CommandServices
+): Promise<boolean> {
+  return (
+    hasManageGuildPermission(interaction.memberPermissions) ||
+    hasConfiguredAdminRole(interaction.guild, interaction.member.roles.cache.keys(), services.guildConfig)
+  );
+}
+
 async function refreshJutsuMessage(
   interaction: ModalSubmitInteraction<"cached"> | ButtonInteraction<"cached">,
   services: CommandServices,
   page: JutsuPage,
-  pageNum = 0
+  pageNum = 0,
+  filterType = "_",
+  filterRank = "_"
 ): Promise<void> {
-  if (!interaction.message) {
-    return;
-  }
-
+  if (!interaction.message) return;
   const canManage = await canManageJutsus(interaction, services);
-
   await interaction.message
-    .edit(await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, page, pageNum))
+    .edit(await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, page, pageNum, filterType, filterRank))
     .catch(() => undefined);
+}
+
+function buildSearchModal(filterType: string, filterRank: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:search:${filterType}:${filterRank}`)
+    .setTitle("Buscar jutsu")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("query")
+          .setLabel("Nome ou chave do jutsu")
+          .setPlaceholder("Ex: Chidori, rasengan, amaterasu...")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(2)
+          .setMaxLength(60)
+      )
+    );
 }
 
 function formatJutsuList(

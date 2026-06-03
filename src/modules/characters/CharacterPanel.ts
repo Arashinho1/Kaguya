@@ -124,10 +124,6 @@ export async function buildCharacterPanel(
             .setStyle(ButtonStyle.Success)
             .setDisabled(availablePA === 0),
           new ButtonBuilder()
-            .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
-            .setLabel("Recalcular")
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
             .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
             .setLabel("Desativar ficha")
             .setStyle(ButtonStyle.Danger)
