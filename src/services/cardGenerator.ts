@@ -75,7 +75,7 @@ const ICON: Record<string, string> = {
 // Dimensões
 // ─────────────────────────────────────────────────────────────────────────────
 
-const W = 820, H = 420;
+const W = 820, H = 480;
 const PW = 210;             // largura painel esquerdo (retrato)
 const CX = PW + 24;         // X do conteúdo
 const CW = W - CX - 14;    // largura do conteúdo
