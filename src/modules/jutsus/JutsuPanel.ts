@@ -57,6 +57,58 @@ const RANK_LABELS: Record<string, string> = {
   b: "Rank B", a: "Rank A", s: "Rank S"
 };
 
+/**
+ * Dois grupos de tipos para os dois dropdowns (max 24 cada).
+ * Grupo 1: técnicas base + elementais + especiais
+ * Grupo 2: kekkei genkai + kuchiyose + clãs
+ */
+const TYPE_GROUP_1: string[] = [
+  "ninjutsu", "taijutsu", "genjutsu", "kenjutsu", "bukijutsu",
+  "fuinjutsu", "senjutsu", "iryo_ninjutsu", "hiden", "jujutsu", "kujaku",
+  "katon", "suiton", "raiton", "doton", "futon",
+  "hachimon", "shichi_ten_kohou",
+  "rinnegan", "hiraishin", "jiongu",
+  "meiton", "taiton"
+];
+
+const TYPE_GROUP_2: string[] = [
+  "hyouton", "ranton", "youton", "futton", "shakuton",
+  "jinton_poeira", "bakuton", "shouton", "jiryoku",
+  "kuchiyose", "kuchiyose_sapos", "kuchiyose_cobras",
+  "kuchiyose_caes", "kuchiyose_macacos", "kuchiyose_aranhas",
+  "kuchiyose_rashoumon", "kuchiyose_aves", "kuchiyose_gatos",
+  "cla_uchiha", "cla_senju", "cla_uzumaki",
+  "cla_hyuuga", "cla_nara", "cla_akimichi"
+];
+
+function buildTypeDropdown(
+  types: { key: string; name: string }[],
+  group: string[],
+  filterType: string,
+  customId: string,
+  placeholder: string
+): ActionRowBuilder<StringSelectMenuBuilder> {
+  const options = [
+    new StringSelectMenuOptionBuilder()
+      .setValue("_").setLabel("— Qualquer —").setDefault(filterType === "_" || !group.includes(filterType))
+  ];
+  // Filtra os tipos que pertencem a este grupo, mantendo a ordem do grupo
+  for (const key of group) {
+    const t = types.find(x => x.key === key);
+    if (!t) continue;
+    options.push(
+      new StringSelectMenuOptionBuilder()
+        .setValue(t.key).setLabel(t.name).setDefault(filterType === t.key)
+    );
+  }
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder(placeholder)
+      .addOptions(options)
+  );
+}
+
 export async function buildJutsuPanel(
   services: CommandServices,
   guild: Guild,
@@ -301,25 +353,21 @@ function buildJutsuComponents(
     )
   );
 
-  // Dropdown de tipos
-  const typeOptions = [
-    new StringSelectMenuOptionBuilder().setValue("_").setLabel("Todos os tipos").setDefault(filterType === "_")
-  ];
-  for (const t of jutsuTypes.slice(0, 24)) {
-    typeOptions.push(
-      new StringSelectMenuOptionBuilder().setValue(t.key).setLabel(t.name).setDefault(filterType === t.key)
-    );
-  }
-  rows.push(
-    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(P + ":sel:type:" + filterRank)
-        .setPlaceholder("🏷 Filtrar por categoria...")
-        .addOptions(typeOptions)
-    )
-  );
+  // Row 2: Dropdown grupo 1 — técnicas base + elementais
+  rows.push(buildTypeDropdown(
+    jutsuTypes, TYPE_GROUP_1, filterType,
+    P + ":sel:type1:" + filterRank,
+    "⚔ Ninjutsu · Elementais · Especiais..."
+  ));
 
-  // Dropdown de rank
+  // Row 3: Dropdown grupo 2 — kekkei genkai + kuchiyose + clãs
+  rows.push(buildTypeDropdown(
+    jutsuTypes, TYPE_GROUP_2, filterType,
+    P + ":sel:type2:" + filterRank,
+    "✦ Kekkei Genkai · Kuchiyose · Clãs..."
+  ));
+
+  // Row 4: Dropdown de rank
   const rankOptions = [
     new StringSelectMenuOptionBuilder().setValue("_").setLabel("Todos os ranks").setDefault(filterRank === "_")
   ];
@@ -840,10 +888,11 @@ async function handleJutsuSelect(
   const rawAction = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:`.length);
   const canManage = await canManageJutsusSelect(interaction, services);
 
-  // ── Filtro de tipo ──────────────────────────────────────────────────────────
-  if (rawAction.startsWith("sel:type:")) {
-    const preservedRank = rawAction.slice("sel:type:".length) || "_";
-    const newType = interaction.values[0] ?? "_";
+  // ── Filtro de tipo (grupo 1 ou 2) ───────────────────────────────────────────
+  if (rawAction.startsWith("sel:type1:") || rawAction.startsWith("sel:type2:")) {
+    const prefix       = rawAction.startsWith("sel:type1:") ? "sel:type1:" : "sel:type2:";
+    const preservedRank = rawAction.slice(prefix.length) || "_";
+    const newType       = interaction.values[0] ?? "_";
     await interaction.update(
       await buildJutsuPanel(services, interaction.guild, interaction.user, canManage, "catalog", 0, newType, preservedRank)
     );
