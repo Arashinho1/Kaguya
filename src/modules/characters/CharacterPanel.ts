@@ -20,6 +20,9 @@ import type { CommandServices } from "../../types/command.js";
 
 const CUSTOM_ID_PREFIX = "kaguya:characters";
 
+/** Atributos legados que foram removidos dos defaults mas podem existir em dados antigos */
+const LEGACY_ATTR_KEYS = new Set(["stamina", "inteligencia"]);
+
 export async function buildCharacterPanel(
   services: CommandServices,
   guild: Guild,
@@ -103,13 +106,15 @@ export async function buildCharacterPanel(
       isActive:      character.isActive,
       imageUrl:      metadata.imageUrl       ?? undefined,
       ownerTag:      target.displayName,
-      attributes:    attrDefs.map(def => ({
-        key:      def.key,
-        name:     def.name,
-        value:    attrVals[def.key] ?? 0,
-        maxValue: def.maxValue ?? 200,
-        sortOrder: def.sortOrder
-      }))
+      attributes:    attrDefs
+        .filter(def => !LEGACY_ATTR_KEYS.has(def.key))
+        .map(def => ({
+          key:      def.key,
+          name:     def.name,
+          value:    attrVals[def.key] ?? 0,
+          maxValue: def.maxValue ?? 200,
+          sortOrder: def.sortOrder
+        }))
     });
 
     return {
@@ -184,6 +189,7 @@ function renderCharacterEmbed(
   const attributes = services.characters.getAttributeValues(character);
   const worldEffectSummary = services.characters.getWorldEffectSummary(character);
   const attributeLines = Object.entries(attributes)
+    .filter(([key]) => !LEGACY_ATTR_KEYS.has(key))
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `\`${key}\`: **${value}**`);
 

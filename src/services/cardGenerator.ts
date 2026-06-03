@@ -367,87 +367,88 @@ function drawStatusBadge(ctx: SKRSContext2D, isActive: boolean) {
 // Conteúdo — lado direito
 // ─────────────────────────────────────────────────────────────────────────────
 
-function drawContent(ctx: SKRSContext2D, data: ProfileCardData) {
-  let y = 28;
 
-  // ── Nome ────────────────────────────────────────────────────────────────────
+// Grupos de atributos
+const PHYSICAL_KEYS = new Set(['forca', 'velocidade', 'resistencia']);
+const NINJA_KEYS    = new Set(['ninjutsu', 'ninjutsu_elemental', 'taijutsu', 'genjutsu']);
+
+function drawContent(ctx: SKRSContext2D, data: ProfileCardData) {
+  let y = 38;
+
+  // Nome
   ctx.save();
   ctx.shadowColor = C.gold;
-  ctx.shadowBlur  = 12;
+  ctx.shadowBlur  = 14;
   ctx.fillStyle   = C.goldL;
-  ctx.font        = FONT(27, "bold");
+  ctx.font        = FONT(34, 'bold');
   ctx.fillText(data.characterName, CX, y);
   ctx.restore();
-  y += 22;
+  y += 26;
 
-  // Conceito (itálico, cor muted)
+  // Conceito
   if (data.concept) {
     ctx.fillStyle = C.muted;
-    ctx.font      = `italic ${FONT(13)}`;
-    ctx.fillText(data.concept.slice(0, 62), CX, y);
-    y += 16;
+    ctx.font      = 'italic ' + FONT(14);
+    ctx.fillText(data.concept.slice(0, 60), CX, y);
+    y += 22;
   }
 
-  // Separador com glow laranja
-  y += 6;
+  y += 10;
   drawGlowLine(ctx, CX, y, CW, C.orange, 0.7);
-  y += 14;
+  y += 18;
 
-  // ── Identidade ──────────────────────────────────────────────────────────────
-  drawSectionLabel(ctx, "▸ IDENTIDADE", CX, y);
-  y += 15;
-
-  const id = [
-    { label: "Vila", value: data.villageName ?? "—" },
-    { label: "Clã",  value: data.clanName    ?? "—" },
-    { label: "Rank", value: data.rankName    ?? "—" },
+  // Identidade
+  drawSectionLabel(ctx, '▸ IDENTIDADE', CX, y);
+  y += 20;
+  const idItems = [
+    { label: 'Vila', value: data.villageName || '—' },
+    { label: 'Clã',  value: data.clanName    || '—' },
+    { label: 'Rank', value: data.rankName    || '—' },
   ];
   const icw = CW / 3;
-
-  for (let i = 0; i < id.length; i++) {
+  for (let i = 0; i < idItems.length; i++) {
     const ix = CX + i * icw;
-    ctx.fillStyle = C.muted;
-    ctx.font      = FONT(9, "normal");
-    ctx.fillText(id[i].label, ix, y);
-    ctx.fillStyle = C.text;
-    ctx.font      = FONT(13, "bold");
-    ctx.fillText(id[i].value.slice(0, 20), ix, y + 15);
+    ctx.fillStyle = C.muted; ctx.font = FONT(11);
+    ctx.fillText(idItems[i].label, ix, y);
+    ctx.fillStyle = C.text; ctx.font = FONT(16, 'bold');
+    ctx.fillText(idItems[i].value.slice(0, 18), ix, y + 20);
   }
-  y += 35;
+  y += 46;
 
-  // Separador
-  drawGlowLine(ctx, CX, y, CW, "#2A2A4A", 1);
-  y += 14;
+  drawGlowLine(ctx, CX, y, CW, '#2A2A4A');
+  y += 18;
 
-  // ── Atributos ───────────────────────────────────────────────────────────────
-  drawSectionLabel(ctx, "▸ ATRIBUTOS", CX, y);
-  y += 14;
+  const physical = data.attributes.filter((a: AttributeEntry) => PHYSICAL_KEYS.has(a.key)).sort((a: AttributeEntry, b: AttributeEntry) => a.sortOrder - b.sortOrder);
+  const ninja    = data.attributes.filter((a: AttributeEntry) => NINJA_KEYS.has(a.key)).sort((a: AttributeEntry, b: AttributeEntry) => a.sortOrder - b.sortOrder);
+  const chakra   = data.attributes.find((a: AttributeEntry) => a.key === 'chakra');
 
-  const ordered = [...data.attributes]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .filter(a => a.key !== "chakra");
-  const chakra = data.attributes.find(a => a.key === "chakra");
+  const BAR_H = 9;
+  const ROW_H = 46;
 
-  const COLS  = 2;
-  const colW  = (CW - 6) / COLS;
-  const BAR_H = 7;
-  const ROW_H = 30;
-
-  for (let i = 0; i < ordered.length; i++) {
-    const attr = ordered[i];
-    const col  = i % COLS;
-    const row  = Math.floor(i / COLS);
-    const ax   = CX + col * (colW + 6);
-    const ay   = y + row * ROW_H;
-    drawAttrBar(ctx, ax, ay, colW - 4, BAR_H, attr);
+  // FÍSICO (3 cols)
+  if (physical.length > 0) {
+    drawSectionLabel(ctx, '▸ FÍSICO', CX, y); y += 20;
+    const phW = (CW - 2 * 6) / 3;
+    for (let i = 0; i < physical.length; i++) {
+      drawAttrBar(ctx, CX + (i % 3) * (phW + 6), y + Math.floor(i / 3) * ROW_H, phW, BAR_H, physical[i]);
+    }
+    y += Math.ceil(physical.length / 3) * ROW_H + 12;
   }
 
-  y += Math.ceil(ordered.length / COLS) * ROW_H + 6;
+  // NINJA (2 cols)
+  if (ninja.length > 0) {
+    drawSectionLabel(ctx, '▸ NINJA', CX, y); y += 20;
+    const njW = (CW - 8) / 2;
+    for (let i = 0; i < ninja.length; i++) {
+      drawAttrBar(ctx, CX + (i % 2) * (njW + 8), y + Math.floor(i / 2) * ROW_H, njW, BAR_H, ninja[i]);
+    }
+    y += Math.ceil(ninja.length / 2) * ROW_H + 12;
+  }
 
-  // Chakra — largura total, destaque especial
+  // CHAKRA (full)
   if (chakra) {
-    drawGlowLine(ctx, CX, y - 4, CW, "#1A3A6B", 0.6);
-    drawAttrBar(ctx, CX, y, CW, BAR_H + 3, chakra, true);
+    drawGlowLine(ctx, CX, y, CW, '#1A3A6B', 0.6); y += 14;
+    drawAttrBar(ctx, CX, y, CW, BAR_H + 4, chakra, true);
   }
 }
 
