@@ -217,6 +217,60 @@ export class GuildConfigService {
     });
   }
 
+  public async syncCanonicalJutsus(
+    guild: Guild,
+    actorId: string
+  ): Promise<{ created: number; skipped: number }> {
+    const rpgGuild = await this.ensureGuild(guild);
+
+    const [allTypes, existingJutsus] = await Promise.all([
+      this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } }),
+      this.prisma.jutsuDefinition.findMany({
+        where: { guildId: rpgGuild.id },
+        select: { key: true }
+      })
+    ]);
+
+    const typeMap = new Map(allTypes.map((t) => [t.key, t.id]));
+    const existingKeys = new Set(existingJutsus.map((j) => j.key));
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const jutsu of DEFAULT_JUTSU_DATA) {
+      if (existingKeys.has(jutsu.key)) {
+        skipped++;
+        continue;
+      }
+      await this.prisma.jutsuDefinition.create({
+        data: {
+          guildId: rpgGuild.id,
+          key: jutsu.key,
+          name: jutsu.name,
+          description: jutsu.description ?? null,
+          typeId: typeMap.get(jutsu.typeKey) ?? null,
+          jutsuRank: jutsu.jutsuRank ?? null,
+          chakraCost: jutsu.chakraCost,
+          duration: jutsu.duration ?? null,
+          usageLimit: jutsu.usageLimit ?? null
+        }
+      });
+      created++;
+    }
+
+    if (created > 0) {
+      await this.writeAuditLog({
+        guildId: rpgGuild.id,
+        actorId,
+        action: "guild.jutsus.sync",
+        targetType: "JutsuDefinition",
+        after: { created, skipped, total: DEFAULT_JUTSU_DATA.length }
+      });
+    }
+
+    return { created, skipped };
+  }
+
   public async getGuildOverview(guild: Guild): Promise<{
     prefix: string;
     settingsCount: number;
