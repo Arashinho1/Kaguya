@@ -9,6 +9,7 @@ import {
   DEFAULT_RANKS,
   type GuildModuleKey
 } from "../../config/defaults.js";
+import { DEFAULT_JUTSU_DATA } from "../../config/defaultJutsus.js";
 import { Prisma, type PrismaClient, type RpgGuild } from "../../generated/prisma/client.js";
 
 export const ADMIN_COMMAND_PERMISSION = "command.admin";
@@ -122,6 +123,7 @@ export class GuildConfigService {
     }
 
     for (const rank of DEFAULT_RANKS) {
+      const desc = "description" in rank ? rank.description : undefined;
       await this.prisma.rankDefinition.upsert({
         where: {
           guildId_key: {
@@ -131,12 +133,14 @@ export class GuildConfigService {
         },
         update: {
           name: rank.name,
+          description: desc,
           sortOrder: rank.sortOrder
         },
         create: {
           guildId: rpgGuild.id,
           key: rank.key,
           name: rank.name,
+          description: desc,
           sortOrder: rank.sortOrder
         }
       });
@@ -161,6 +165,42 @@ export class GuildConfigService {
       });
     }
 
+    // Resolve IDs de tipos de jutsu antes de criar os jutsus padrão
+    const allTypes = await this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } });
+    const typeMap = new Map(allTypes.map((t) => [t.key, t.id]));
+
+    for (const jutsu of DEFAULT_JUTSU_DATA) {
+      await this.prisma.jutsuDefinition.upsert({
+        where: {
+          guildId_key: {
+            guildId: rpgGuild.id,
+            key: jutsu.key
+          }
+        },
+        update: {
+          name: jutsu.name,
+          description: jutsu.description ?? null,
+          typeId: typeMap.get(jutsu.typeKey) ?? null,
+          jutsuRank: jutsu.jutsuRank ?? null,
+          chakraCost: jutsu.chakraCost,
+          duration: jutsu.duration ?? null,
+          usageLimit: jutsu.usageLimit ?? null
+        },
+        create: {
+          guildId: rpgGuild.id,
+          key: jutsu.key,
+          name: jutsu.name,
+          description: jutsu.description ?? null,
+          typeId: typeMap.get(jutsu.typeKey) ?? null,
+          requiredRankId: null,
+          jutsuRank: jutsu.jutsuRank ?? null,
+          chakraCost: jutsu.chakraCost,
+          duration: jutsu.duration ?? null,
+          usageLimit: jutsu.usageLimit ?? null
+        }
+      });
+    }
+
     await this.writeAuditLog({
       guildId: rpgGuild.id,
       actorId,
@@ -171,7 +211,8 @@ export class GuildConfigService {
         settings: DEFAULT_GUILD_SETTINGS.length,
         attributes: DEFAULT_ATTRIBUTES.length,
         ranks: DEFAULT_RANKS.length,
-        jutsuTypes: DEFAULT_JUTSU_TYPES.length
+        jutsuTypes: DEFAULT_JUTSU_TYPES.length,
+        jutsus: DEFAULT_JUTSU_DATA.length
       }
     });
   }

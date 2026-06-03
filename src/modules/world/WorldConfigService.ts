@@ -3,13 +3,14 @@ import type { Guild } from "discord.js";
 import {
   Prisma,
   type Clan,
+  type JutsuType,
   type PrismaClient,
   type RankDefinition,
   type Village
 } from "../../generated/prisma/client.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 
-export type WorldEntityType = "clan" | "village" | "rank";
+export type WorldEntityType = "clan" | "village" | "rank" | "jutsu_type";
 
 export interface WorldOverview {
   clansCount: number;
@@ -18,6 +19,8 @@ export interface WorldOverview {
   activeVillagesCount: number;
   ranksCount: number;
   activeRanksCount: number;
+  jutsuTypesCount: number;
+  activeJutsuTypesCount: number;
 }
 
 export interface CreateClanInput {
@@ -62,6 +65,17 @@ export interface UpdateRankInput {
   isActive?: boolean;
 }
 
+export interface CreateJutsuTypeInput {
+  name: string;
+  description?: string | null;
+}
+
+export interface UpdateJutsuTypeInput {
+  name?: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
 export class WorldConfigError extends Error {
   public constructor(message: string) {
     super(message);
@@ -84,14 +98,18 @@ export class WorldConfigService {
       villagesCount,
       activeVillagesCount,
       ranksCount,
-      activeRanksCount
+      activeRanksCount,
+      jutsuTypesCount,
+      activeJutsuTypesCount
     ] = await Promise.all([
       this.prisma.clan.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.clan.count({ where: { guildId: rpgGuild.id, isActive: true } }),
       this.prisma.village.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.village.count({ where: { guildId: rpgGuild.id, isActive: true } }),
       this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id, isActive: true } })
+      this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id, isActive: true } }),
+      this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id } }),
+      this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id, isActive: true } })
     ]);
 
     return {
@@ -100,7 +118,9 @@ export class WorldConfigService {
       villagesCount,
       activeVillagesCount,
       ranksCount,
-      activeRanksCount
+      activeRanksCount,
+      jutsuTypesCount,
+      activeJutsuTypesCount
     };
   }
 
@@ -433,6 +453,87 @@ export class WorldConfigService {
     return updated;
   }
 
+  public async listJutsuTypes(
+    guild: Guild,
+    options: { includeInactive?: boolean } = {}
+  ): Promise<JutsuType[]> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+
+    return this.prisma.jutsuType.findMany({
+      where: {
+        guildId: rpgGuild.id,
+        ...(options.includeInactive ? {} : { isActive: true })
+      },
+      orderBy: [{ name: "asc" }]
+    });
+  }
+
+  public async createJutsuType(
+    guild: Guild,
+    actorId: string,
+    input: CreateJutsuTypeInput
+  ): Promise<JutsuType> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const key = normalizeKey(input.name);
+
+    if (!key) {
+      throw new WorldConfigError("Informe um nome válido com letras ou números.");
+    }
+
+    await this.assertJutsuTypeKeyAvailable(rpgGuild.id, key);
+
+    const created = await this.prisma.jutsuType.create({
+      data: {
+        guildId: rpgGuild.id,
+        key,
+        name: input.name,
+        description: input.description
+      }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "world.jutsu_type.create",
+      targetType: "JutsuType",
+      targetId: created.id,
+      after: serializeJutsuType(created)
+    });
+
+    return created;
+  }
+
+  public async updateJutsuType(
+    guild: Guild,
+    actorId: string,
+    identifier: string,
+    input: UpdateJutsuTypeInput
+  ): Promise<JutsuType | null> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const current = await this.findJutsuTypeByIdentifier(rpgGuild.id, identifier);
+
+    if (!current) {
+      return null;
+    }
+
+    const updated = await this.prisma.jutsuType.update({
+      where: { id: current.id },
+      data: input
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "world.jutsu_type.update",
+      targetType: "JutsuType",
+      targetId: updated.id,
+      before: serializeJutsuType(current),
+      after: serializeJutsuType(updated)
+    });
+
+    return updated;
+  }
+
   private async findClanByIdentifier(guildId: string, identifier: string): Promise<Clan | null> {
     const value = identifier.trim();
 
@@ -472,6 +573,36 @@ export class WorldConfigService {
         ]
       }
     });
+  }
+
+  private async findJutsuTypeByIdentifier(guildId: string, identifier: string): Promise<JutsuType | null> {
+    const value = identifier.trim();
+    const key = normalizeKey(value);
+
+    return this.prisma.jutsuType.findFirst({
+      where: {
+        guildId,
+        OR: [
+          { id: value },
+          { key },
+          { name: { equals: value, mode: "insensitive" } }
+        ]
+      }
+    });
+  }
+
+  private async assertJutsuTypeKeyAvailable(guildId: string, key: string, ignoredId?: string): Promise<void> {
+    const existing = await this.prisma.jutsuType.findFirst({
+      where: {
+        guildId,
+        key,
+        ...(ignoredId ? { id: { not: ignoredId } } : {})
+      }
+    });
+
+    if (existing) {
+      throw new WorldConfigError(`Já existe um tipo de jutsu com a chave \`${existing.key}\` neste servidor.`);
+    }
   }
 
   private async assertClanNameAvailable(
@@ -596,5 +727,15 @@ function serializeRank(rank: RankDefinition): Prisma.InputJsonObject {
     sortOrder: rank.sortOrder,
     metadata: rank.metadata as Prisma.InputJsonValue,
     isActive: rank.isActive
+  };
+}
+
+function serializeJutsuType(jutsuType: JutsuType): Prisma.InputJsonObject {
+  return {
+    id: jutsuType.id,
+    key: jutsuType.key,
+    name: jutsuType.name,
+    description: jutsuType.description,
+    isActive: jutsuType.isActive
   };
 }

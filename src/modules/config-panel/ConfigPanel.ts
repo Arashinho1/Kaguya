@@ -26,12 +26,14 @@ import { ADMIN_COMMAND_PERMISSION } from "../guild-config/GuildConfigService.js"
 import {
   WorldConfigError,
   normalizeKey,
+  type CreateJutsuTypeInput,
   type UpdateClanInput,
+  type UpdateJutsuTypeInput,
   type UpdateRankInput,
   type UpdateVillageInput,
   type WorldEntityType
 } from "../world/WorldConfigService.js";
-import { Prisma, type Clan, type RankDefinition, type Village } from "../../generated/prisma/client.js";
+import { Prisma, type Clan, type JutsuType, type RankDefinition, type Village } from "../../generated/prisma/client.js";
 import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import type { CommandServices } from "../../types/command.js";
@@ -52,7 +54,8 @@ type ConfigPage =
   | "world"
   | "worldClans"
   | "worldVillages"
-  | "worldRanks";
+  | "worldRanks"
+  | "worldJutsuTypes";
 
 export async function buildConfigPanel(
   services: CommandServices,
@@ -133,7 +136,13 @@ export async function handleConfigInteraction(
       return true;
     }
 
-    if (action === "world" || action === "worldClans" || action === "worldVillages" || action === "worldRanks") {
+    if (
+      action === "world" ||
+      action === "worldClans" ||
+      action === "worldVillages" ||
+      action === "worldRanks" ||
+      action === "worldJutsuTypes"
+    ) {
       const prefix = await services.guildConfig.getPrefix(interaction.guild).catch(() => ".");
       await interaction.update(await buildConfigPanel(services, interaction.guild, prefix, action));
       return true;
@@ -198,7 +207,7 @@ async function buildConfigEmbed(
       { name: "Vilas", value: `${worldOverview.activeVillagesCount}/${worldOverview.villagesCount} ativas`, inline: true },
       { name: "Ranks", value: `${worldOverview.activeRanksCount}/${worldOverview.ranksCount} ativos`, inline: true },
       { name: "Jutsus", value: String(overview.jutsusCount), inline: true },
-      { name: "Tipos de jutsu", value: String(overview.jutsuTypesCount), inline: true }
+      { name: "Tipos de jutsu", value: `${worldOverview.activeJutsuTypesCount}/${worldOverview.jutsuTypesCount} ativos`, inline: true }
     );
 
   if (page === "prefix") {
@@ -245,6 +254,7 @@ async function buildConfigEmbed(
         `Clãs: **${worldOverview.activeClansCount}/${worldOverview.clansCount} ativos**`,
         `Vilas: **${worldOverview.activeVillagesCount}/${worldOverview.villagesCount} ativas**`,
         `Ranks: **${worldOverview.activeRanksCount}/${worldOverview.ranksCount} ativos**`,
+        `Tipos de jutsu: **${worldOverview.activeJutsuTypesCount}/${worldOverview.jutsuTypesCount} ativos**`,
         "",
         "Use a lista de dados do RPG para listar, criar, editar ou ajustar metadados.",
         "Bônus e restrições de clã, vila e rank já afetam a ficha."
@@ -270,6 +280,13 @@ async function buildConfigEmbed(
     embed.addFields({
       name: "Ranks cadastrados",
       value: formatRankList(ranks)
+    });
+  } else if (page === "worldJutsuTypes") {
+    const jutsuTypes = await services.world.listJutsuTypes(guild, { includeInactive: true });
+
+    embed.addFields({
+      name: "Tipos de jutsu cadastrados",
+      value: formatJutsuTypeList(jutsuTypes)
     });
   } else {
     embed.addFields({
@@ -317,7 +334,13 @@ function buildConfigComponents(page: ConfigPage) {
     );
   }
 
-  if (page === "world" || page === "worldClans" || page === "worldVillages" || page === "worldRanks") {
+  if (
+    page === "world" ||
+    page === "worldClans" ||
+    page === "worldVillages" ||
+    page === "worldRanks" ||
+    page === "worldJutsuTypes"
+  ) {
     components.push(buildWorldSelect());
   }
 
@@ -485,7 +508,19 @@ function buildWorldSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
         new StringSelectMenuOptionBuilder()
           .setLabel("Metadados do rank")
           .setDescription("Ajusta bônus, restrições e metadados em JSON.")
-          .setValue("advanced:rank")
+          .setValue("advanced:rank"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Listar tipos de jutsu")
+          .setDescription("Mostra tipos ativos e inativos cadastrados.")
+          .setValue("list:jutsu_type"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Criar tipo de jutsu")
+          .setDescription("Cadastra um novo tipo (ex: Katon, Bukijutsu).")
+          .setValue("create:jutsu_type"),
+        new StringSelectMenuOptionBuilder()
+          .setLabel("Editar tipo de jutsu")
+          .setDescription("Altera nome, descrição ou status.")
+          .setValue("edit:jutsu_type")
       )
   );
 }
@@ -562,6 +597,16 @@ function buildModuleModal(action: "enable" | "disable"): ModalBuilder {
 }
 
 function buildWorldCreateModal(entity: WorldEntityType): ModalBuilder {
+  if (entity === "jutsu_type") {
+    return new ModalBuilder()
+      .setCustomId(`${CUSTOM_ID_PREFIX}:modal:world:create:jutsu_type`)
+      .setTitle("Criar tipo de jutsu")
+      .addComponents(
+        textInputRow("name", "Nome", "Bukijutsu", TextInputStyle.Short, true),
+        textInputRow("description", "Descrição", "Descrição curta do tipo", TextInputStyle.Paragraph, false)
+      );
+  }
+
   if (entity === "clan") {
     return new ModalBuilder()
       .setCustomId(`${CUSTOM_ID_PREFIX}:modal:world:create:clan`)
@@ -599,6 +644,18 @@ function buildWorldCreateModal(entity: WorldEntityType): ModalBuilder {
 }
 
 function buildWorldEditModal(entity: WorldEntityType): ModalBuilder {
+  if (entity === "jutsu_type") {
+    return new ModalBuilder()
+      .setCustomId(`${CUSTOM_ID_PREFIX}:modal:world:edit:jutsu_type`)
+      .setTitle("Editar tipo de jutsu")
+      .addComponents(
+        textInputRow("identifier", "Nome, chave ou ID atual", "Katon", TextInputStyle.Short, true),
+        textInputRow("name", "Novo nome", "Katon", TextInputStyle.Short, false),
+        textInputRow("description", "Descrição", "- para limpar", TextInputStyle.Paragraph, false),
+        textInputRow("status", "Status", "ativo, inativo ou vazio para manter", TextInputStyle.Short, false)
+      );
+  }
+
   if (entity === "clan") {
     return new ModalBuilder()
       .setCustomId(`${CUSTOM_ID_PREFIX}:modal:world:edit:clan`)
@@ -914,6 +971,22 @@ async function handleWorldCreateModal(
   services: CommandServices,
   entity: WorldEntityType
 ): Promise<void> {
+  if (entity === "jutsu_type") {
+    const name = parseRequiredText(interaction.fields.getTextInputValue("name"), "Nome", 80);
+    const description = parseOptionalText(interaction.fields.getTextInputValue("description"), 900);
+
+    const input: CreateJutsuTypeInput = { name, description };
+    const created = await services.world.createJutsuType(interaction.guild, interaction.user.id, input);
+
+    await sendConfigLog(interaction.guild, interaction.user, services, {
+      title: "Tipo de jutsu criado",
+      description: `O tipo **${created.name}** \`${created.key}\` foi cadastrado.`
+    });
+    await refreshWorldMessage(interaction, services, entity);
+    await interaction.editReply(`Tipo de jutsu **${created.name}** criado com a chave \`${created.key}\`.`);
+    return;
+  }
+
   if (entity === "clan") {
     const name = parseRequiredText(interaction.fields.getTextInputValue("name"), "Nome", 80);
     const description = parseOptionalText(interaction.fields.getTextInputValue("description"), 900);
@@ -1001,6 +1074,37 @@ async function handleWorldEditModal(
   entity: WorldEntityType
 ): Promise<void> {
   const identifier = parseRequiredText(interaction.fields.getTextInputValue("identifier"), "Identificador", 120);
+
+  if (entity === "jutsu_type") {
+    const input: UpdateJutsuTypeInput = {};
+    const name = parseOptionalText(interaction.fields.getTextInputValue("name"), 80) ?? undefined;
+    const description = parseOptionalText(interaction.fields.getTextInputValue("description"), 900, true);
+    const isActive = parseOptionalStatus(interaction.fields.getTextInputValue("status"));
+
+    if (name !== undefined) input.name = name;
+    if (description !== undefined) input.description = description;
+    if (isActive !== undefined) input.isActive = isActive;
+
+    if (!hasInput(input)) {
+      await interaction.editReply("Informe ao menos um campo para alterar.");
+      return;
+    }
+
+    const updated = await services.world.updateJutsuType(interaction.guild, interaction.user.id, identifier, input);
+
+    if (!updated) {
+      await interaction.editReply("Não encontrei esse tipo de jutsu neste servidor.");
+      return;
+    }
+
+    await sendConfigLog(interaction.guild, interaction.user, services, {
+      title: "Tipo de jutsu atualizado",
+      description: `O tipo **${updated.name}** \`${updated.key}\` foi atualizado.`
+    });
+    await refreshWorldMessage(interaction, services, entity);
+    await interaction.editReply(`Tipo de jutsu **${updated.name}** atualizado.`);
+    return;
+  }
 
   if (entity === "clan") {
     const input: UpdateClanInput = {};
@@ -1201,7 +1305,8 @@ function parsePage(value: string): ConfigPage {
     value === "world" ||
     value === "worldClans" ||
     value === "worldVillages" ||
-    value === "worldRanks"
+    value === "worldRanks" ||
+    value === "worldJutsuTypes"
   ) {
     return value;
   }
@@ -1241,7 +1346,7 @@ function parseModuleKey(value: string): GuildModuleKey | null {
 }
 
 function parseWorldEntityType(value: string | undefined): WorldEntityType | null {
-  return value === "clan" || value === "village" || value === "rank" ? value : null;
+  return value === "clan" || value === "village" || value === "rank" || value === "jutsu_type" ? value : null;
 }
 
 function getWorldPage(entity: WorldEntityType): ConfigPage {
@@ -1251,6 +1356,10 @@ function getWorldPage(entity: WorldEntityType): ConfigPage {
 
   if (entity === "village") {
     return "worldVillages";
+  }
+
+  if (entity === "jutsu_type") {
+    return "worldJutsuTypes";
   }
 
   return "worldRanks";
@@ -1304,6 +1413,23 @@ function formatRankList(ranks: RankDefinition[]): string {
       ].join("\n")
     ),
     ranks.length
+  );
+}
+
+function formatJutsuTypeList(jutsuTypes: JutsuType[]): string {
+  if (jutsuTypes.length === 0) {
+    return "Nenhum tipo de jutsu cadastrado. Use `.setup` para criar defaults ou `Criar tipo de jutsu` na lista de dados do RPG.";
+  }
+
+  return limitLines(
+    jutsuTypes.map((t) =>
+      [
+        `${formatStatus(t.isActive)} **${t.name}** \`${t.key}\``,
+        t.description ? truncate(t.description, 120) : "Sem descrição.",
+        `ID: \`${t.id}\``
+      ].join("\n")
+    ),
+    jutsuTypes.length
   );
 }
 

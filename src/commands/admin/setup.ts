@@ -21,7 +21,7 @@ export const setupCommand: PrefixCommand = {
         new EmbedBuilder()
           .setColor(0x805ad5)
           .setTitle("Servidor preparado")
-          .setDescription("Criei as configurações iniciais, atributos, ranks e tipos de jutsu deste servidor.")
+          .setDescription("Configurações, atributos, ranks (E–S), tipos de jutsu e jutsus padrão criados ou atualizados.\nTudo pode ser editado pelo painel `.config` → Mundo RPG.")
       ]
     });
   }

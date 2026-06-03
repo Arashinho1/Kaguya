@@ -195,6 +195,9 @@ model JutsuDefinition {
   typeId         String?
   requiredRankId String?
   chakraCost     Int      @default(0)
+  jutsuRank      String?
+  duration       String?
+  usageLimit     Int?
   requirements   Json     @default("{}")
   metadata       Json     @default("{}")
   isActive       Boolean  @default(true)

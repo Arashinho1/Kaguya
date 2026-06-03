@@ -39,8 +39,13 @@ export interface CreateJutsuInput {
   name: string;
   description?: string | null;
   type?: string | null;
+  /** Rank do personagem exigido para aprender (chave de RankDefinition) */
   requiredRank?: string | null;
+  /** Classificação canônica do jutsu: E, D, C, B, A ou S */
+  jutsuRank?: string | null;
   chakraCost?: number;
+  duration?: string | null;
+  usageLimit?: number | null;
   requirements?: Prisma.InputJsonObject;
   metadata?: Prisma.InputJsonObject;
 }
@@ -49,8 +54,13 @@ export interface UpdateJutsuInput {
   name?: string;
   description?: string | null;
   type?: string | null;
+  /** Rank do personagem exigido para aprender (chave de RankDefinition) */
   requiredRank?: string | null;
+  /** Classificação canônica do jutsu: E, D, C, B, A ou S */
+  jutsuRank?: string | null;
   chakraCost?: number;
+  duration?: string | null;
+  usageLimit?: number | null;
   isActive?: boolean;
 }
 
@@ -186,7 +196,10 @@ export class JutsuService {
         description: input.description,
         typeId: type?.id,
         requiredRankId: requiredRank?.id,
+        jutsuRank: normalizeJutsuRank(input.jutsuRank),
         chakraCost: input.chakraCost ?? 0,
+        duration: input.duration,
+        usageLimit: input.usageLimit,
         requirements: input.requirements ?? {},
         metadata: input.metadata ?? {}
       },
@@ -230,7 +243,10 @@ export class JutsuService {
         description: input.description,
         typeId: input.type === undefined ? undefined : type?.id ?? null,
         requiredRankId: input.requiredRank === undefined ? undefined : requiredRank?.id ?? null,
+        jutsuRank: input.jutsuRank === undefined ? undefined : normalizeJutsuRank(input.jutsuRank),
         chakraCost: input.chakraCost,
+        duration: input.duration,
+        usageLimit: input.usageLimit,
         isActive: input.isActive
       },
       include: JUTSU_INCLUDE
@@ -494,9 +510,18 @@ export class JutsuService {
   }
 
   public formatJutsu(jutsu: JutsuWithRelations): string {
+    const stats = [
+      `Tipo: **${jutsu.type?.name ?? "—"}**`,
+      jutsu.jutsuRank ? `Rank: **${jutsu.jutsuRank}**` : null,
+      jutsu.requiredRank ? `Ninja: **${jutsu.requiredRank.name}+**` : null,
+      `Chakra: **${jutsu.chakraCost}**`,
+      jutsu.duration ? `Duração: **${jutsu.duration}**` : null,
+      jutsu.usageLimit ? `Usos: **${jutsu.usageLimit}x**` : null
+    ].filter(Boolean).join(" | ");
+
     return [
       `**${jutsu.name}** \`${jutsu.key}\``,
-      `Tipo: **${jutsu.type?.name ?? "Não definido"}** | Rank: **${jutsu.requiredRank?.name ?? "Livre"}** | Chakra: **${jutsu.chakraCost}**`,
+      stats,
       jutsu.description ?? "Sem descrição."
     ].join("\n");
   }
@@ -729,11 +754,23 @@ function serializeJutsu(jutsu: JutsuWithRelations): Prisma.InputJsonObject {
     description: jutsu.description,
     typeId: jutsu.typeId,
     requiredRankId: jutsu.requiredRankId,
+    jutsuRank: jutsu.jutsuRank,
     chakraCost: jutsu.chakraCost,
+    duration: jutsu.duration,
+    usageLimit: jutsu.usageLimit,
     requirements: jutsu.requirements as Prisma.InputJsonValue,
     metadata: jutsu.metadata as Prisma.InputJsonValue,
     isActive: jutsu.isActive
   };
+}
+
+const VALID_JUTSU_RANKS = new Set(["E", "D", "C", "B", "A", "S"]);
+
+function normalizeJutsuRank(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (!value) return null;
+  const upper = value.trim().toUpperCase();
+  return VALID_JUTSU_RANKS.has(upper) ? upper : null;
 }
 
 function normalizeJutsuKey(value: string): string {

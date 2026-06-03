@@ -280,15 +280,18 @@ async function handleJutsuModal(
     const key = parseRequiredText(interaction.fields.getTextInputValue("key"), "Chave", 60);
     const name = parseRequiredText(interaction.fields.getTextInputValue("name"), "Nome", 80);
     const description = parseOptionalText(interaction.fields.getTextInputValue("description"), 900);
-    const { type, rank } = parseTypeRank(interaction.fields.getTextInputValue("typeRank"));
-    const chakraCost = parseIntegerField(interaction.fields.getTextInputValue("chakraCost"), "Custo de Chakra", 0);
+    const { type, jutsuRank, rank } = parseTypeRankInfo(interaction.fields.getTextInputValue("typeRankInfo"));
+    const { chakraCost, duration, usageLimit } = parseCostDurationUsage(interaction.fields.getTextInputValue("costDurUso"));
     const created = await services.jutsus.createJutsu(interaction.guild, interaction.user.id, {
       key,
       name,
       description,
       type,
+      jutsuRank,
       requiredRank: rank,
-      chakraCost
+      chakraCost,
+      duration,
+      usageLimit
     });
 
     await sendStaffLogForGuild(interaction.guild, interaction.user, services, {
@@ -303,11 +306,11 @@ async function handleJutsuModal(
   if (action === "edit") {
     const identifier = parseRequiredText(interaction.fields.getTextInputValue("identifier"), "Jutsu", 120);
     const name = parseOptionalText(interaction.fields.getTextInputValue("name"), 80);
-    const { type, rank, hasInput: hasTypeRankInput } = parseTypeRank(interaction.fields.getTextInputValue("typeRank"));
-    const chakraCost = parseOptionalIntegerField(interaction.fields.getTextInputValue("chakraCost"), "Custo de Chakra", 0);
+    const { type, jutsuRank, rank, hasInput: hasTypeRankInput } = parseTypeRankInfo(interaction.fields.getTextInputValue("typeRankInfo"));
+    const { chakraCost, duration, usageLimit, hasInput: hasCostInput } = parseCostDurationUsage(interaction.fields.getTextInputValue("costDurUso"));
     const isActive = parseOptionalStatus(interaction.fields.getTextInputValue("status"));
 
-    if (name === undefined && !hasTypeRankInput && chakraCost === undefined && isActive === undefined) {
+    if (name === undefined && !hasTypeRankInput && !hasCostInput && isActive === undefined) {
       await interaction.editReply("Informe ao menos um campo para alterar.");
       return;
     }
@@ -315,8 +318,11 @@ async function handleJutsuModal(
     const updated = await services.jutsus.updateJutsu(interaction.guild, interaction.user.id, identifier, {
       name,
       type: hasTypeRankInput ? type : undefined,
+      jutsuRank: hasTypeRankInput ? jutsuRank : undefined,
       requiredRank: hasTypeRankInput ? rank : undefined,
       chakraCost,
+      duration,
+      usageLimit,
       isActive
     });
 
@@ -428,8 +434,8 @@ function buildCreateJutsuModal(): ModalBuilder {
     .addComponents(
       textInputRow("key", "Chave técnica", "chidori", TextInputStyle.Short, true),
       textInputRow("name", "Nome", "Chidori", TextInputStyle.Short, true),
-      textInputRow("typeRank", "Tipo | Rank mínimo", "ninjutsu | chunin", TextInputStyle.Short, false),
-      textInputRow("chakraCost", "Custo de Chakra", "10", TextInputStyle.Short, false),
+      textInputRow("typeRankInfo", "Tipo | Rank jutsu | Rank ninja mín.", "ninjutsu | B | jonin", TextInputStyle.Short, false),
+      textInputRow("costDurUso", "Chakra | Duração | Usos", "10 | 3 rodadas | 2", TextInputStyle.Short, false),
       textInputRow("description", "Descrição", "Jutsu de investida elétrica.", TextInputStyle.Paragraph, false)
     );
 }
@@ -441,8 +447,8 @@ function buildEditJutsuModal(): ModalBuilder {
     .addComponents(
       textInputRow("identifier", "Chave, nome ou ID", "chidori", TextInputStyle.Short, true),
       textInputRow("name", "Novo nome", "Chidori", TextInputStyle.Short, false),
-      textInputRow("typeRank", "Tipo | Rank mínimo", "ninjutsu | chunin ou - | -", TextInputStyle.Short, false),
-      textInputRow("chakraCost", "Custo de Chakra", "10 ou vazio para manter", TextInputStyle.Short, false),
+      textInputRow("typeRankInfo", "Tipo | Rank jutsu | Rank ninja mín.", "ninjutsu | B | jonin ou - | - | -", TextInputStyle.Short, false),
+      textInputRow("costDurUso", "Chakra | Duração | Usos", "10 | 3 rodadas | 2 ou vazio", TextInputStyle.Short, false),
       textInputRow("status", "Status", "ativo, inativo ou vazio para manter", TextInputStyle.Short, false)
     );
 }
@@ -534,8 +540,9 @@ function formatJutsuList(
   return [...visible, ...suffix].join("\n\n").slice(0, 1024);
 }
 
-function parseTypeRank(value: string): {
+function parseTypeRankInfo(value: string): {
   type?: string | null;
+  jutsuRank?: string | null;
   rank?: string | null;
   hasInput: boolean;
 } {
@@ -545,10 +552,12 @@ function parseTypeRank(value: string): {
     return { hasInput: false };
   }
 
-  const [typeRaw, rankRaw] = trimmed.split("|").map((part) => parseClearableOptional(part ?? ""));
+  const parts = trimmed.split("|").map((part) => parseClearableOptional(part ?? ""));
+  const [typeRaw, jutsuRankRaw, rankRaw] = parts;
 
   return {
     type: typeRaw,
+    jutsuRank: jutsuRankRaw,
     rank: rankRaw,
     hasInput: true
   };
@@ -582,24 +591,49 @@ function parseOptionalText(value: string, maxLength: number): string | undefined
   return trimmed;
 }
 
-function parseIntegerField(value: string, label: string, min: number): number {
+function parseCostDurationUsage(value: string): {
+  chakraCost?: number;
+  duration?: string | null;
+  usageLimit?: number | null;
+  hasInput: boolean;
+} {
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return 0;
+    return { hasInput: false };
   }
 
-  return parseRequiredInteger(trimmed, label, min);
-}
+  const parts = trimmed.split("|").map((p) => p.trim());
+  const [rawCost, rawDur, rawUso] = parts;
+  let chakraCost: number | undefined;
+  let duration: string | null | undefined;
+  let usageLimit: number | null | undefined;
 
-function parseOptionalIntegerField(value: string, label: string, min: number): number | undefined {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return undefined;
+  if (rawCost) {
+    if (rawCost !== "-") {
+      if (!/^\d+$/.test(rawCost)) {
+        throw new JutsuRuleError(["Custo de Chakra precisa ser um número inteiro não negativo."]);
+      }
+      chakraCost = Number(rawCost);
+    }
   }
 
-  return parseRequiredInteger(trimmed, label, min);
+  if (rawDur !== undefined) {
+    duration = !rawDur || rawDur === "-" ? null : rawDur;
+  }
+
+  if (rawUso !== undefined) {
+    if (!rawUso || rawUso === "-") {
+      usageLimit = null;
+    } else {
+      if (!/^\d+$/.test(rawUso)) {
+        throw new JutsuRuleError(["Usos precisa ser um número inteiro positivo."]);
+      }
+      usageLimit = Number(rawUso) || null;
+    }
+  }
+
+  return { chakraCost, duration, usageLimit, hasInput: true };
 }
 
 function parseRequiredInteger(value: string, label: string, min: number): number {
