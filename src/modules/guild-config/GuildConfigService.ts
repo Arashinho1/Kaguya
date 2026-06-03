@@ -2,11 +2,13 @@ import type { Guild } from "discord.js";
 
 import {
   DEFAULT_ATTRIBUTES,
+  DEFAULT_CLANS,
   DEFAULT_GUILD_SETTINGS,
   DEFAULT_JUTSU_TYPES,
   DEFAULT_MODULE_STATUS,
   DEFAULT_PREFIX,
   DEFAULT_RANKS,
+  DEFAULT_VILLAGES,
   type GuildModuleKey
 } from "../../config/defaults.js";
 import { DEFAULT_JUTSU_DATA } from "../../config/defaultJutsus.js";
@@ -165,6 +167,22 @@ export class GuildConfigService {
       });
     }
 
+    for (const village of DEFAULT_VILLAGES) {
+      await this.prisma.village.upsert({
+        where: { guildId_name: { guildId: rpgGuild.id, name: village.name } },
+        update: {},
+        create: { guildId: rpgGuild.id, name: village.name, description: village.description }
+      });
+    }
+
+    for (const clan of DEFAULT_CLANS) {
+      await this.prisma.clan.upsert({
+        where: { guildId_name: { guildId: rpgGuild.id, name: clan.name } },
+        update: {},
+        create: { guildId: rpgGuild.id, name: clan.name, description: clan.description }
+      });
+    }
+
     // Resolve IDs de tipos de jutsu antes de criar os jutsus padrão
     const allTypes = await this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } });
     const typeMap = new Map(allTypes.map((t) => [t.key, t.id]));
@@ -211,6 +229,8 @@ export class GuildConfigService {
         settings: DEFAULT_GUILD_SETTINGS.length,
         attributes: DEFAULT_ATTRIBUTES.length,
         ranks: DEFAULT_RANKS.length,
+        villages: DEFAULT_VILLAGES.length,
+        clans: DEFAULT_CLANS.length,
         jutsuTypes: DEFAULT_JUTSU_TYPES.length,
         jutsus: DEFAULT_JUTSU_DATA.length
       }
