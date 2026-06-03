@@ -591,28 +591,39 @@ export class JutsuService {
     };
   }
 
+  /** Formato compacto para listagem no catálogo — sem descrição para não estourar o embed */
   public formatJutsu(jutsu: JutsuWithRelations): string {
-    // Linha de stats — formato compacto para caber no embed
     const statParts = [
-      jutsu.jutsuRank          ? `**[${jutsu.jutsuRank}]**`                : null,
-      jutsu.type?.name         ? jutsu.type.name                           : "—",
+      jutsu.jutsuRank    ? `**[${jutsu.jutsuRank}]**`            : null,
+      jutsu.type?.name   ? jutsu.type.name                        : "—",
       `⚡ ${jutsu.chakraCost}`,
-      jutsu.requiredRank       ? `Ninja: ${jutsu.requiredRank.name}+`     : null,
-      jutsu.duration           ? jutsu.duration                            : null,
-      jutsu.usageLimit         ? `${jutsu.usageLimit}x`                   : null,
+      jutsu.requiredRank ? `Ninja: ${jutsu.requiredRank.name}+`  : null,
+      jutsu.duration     ? jutsu.duration                         : null,
+      jutsu.usageLimit   ? `${jutsu.usageLimit}x`                : null,
     ].filter(Boolean);
-
-    // Descrição limitada a 90 chars para não explodir o embed
-    const rawDesc = jutsu.description ?? "";
-    const desc = rawDesc.length > 90
-      ? rawDesc.slice(0, 90) + "…"
-      : rawDesc;
 
     return [
       `**${jutsu.name}** \`${jutsu.key}\``,
-      statParts.join(" · "),
-      desc
-    ].filter(s => s.length > 0).join("\n");
+      statParts.join(" · ")
+    ].join("\n");
+  }
+
+  /** Formato completo com descrição — usado em detalhes/busca */
+  public formatJutsuFull(jutsu: JutsuWithRelations): string {
+    const stats = [
+      jutsu.jutsuRank    ? `Rank: **${jutsu.jutsuRank}**`         : null,
+      jutsu.type?.name   ? `Tipo: **${jutsu.type.name}**`         : null,
+      `Chakra: **${jutsu.chakraCost}**`,
+      jutsu.requiredRank ? `Ninja: **${jutsu.requiredRank.name}+**` : null,
+      jutsu.duration     ? `Duração: **${jutsu.duration}**`        : null,
+      jutsu.usageLimit   ? `Usos: **${jutsu.usageLimit}x**`        : null,
+    ].filter(Boolean).join(" | ");
+
+    return [
+      `**${jutsu.name}** \`${jutsu.key}\``,
+      stats,
+      jutsu.description ?? "Sem descrição."
+    ].join("\n");
   }
 
   private async findJutsuByIdentifier(

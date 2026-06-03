@@ -492,11 +492,11 @@ async function handleJutsuButton(
       description: `**${result.created}** jutsus importados do catálogo oficial. **${result.skipped}** já existiam.`
     });
     await refreshJutsuMessage(interaction, services, "admin", 0, "_", "_");
-    await interaction.editReply(
-      result.created > 0
-        ? `Sincronização concluída: **${result.created}** jutsus importados, **${result.skipped}** já existiam.`
-        : `Catálogo já está sincronizado — **${result.skipped}** jutsus encontrados, nenhum novo.`
-    );
+    const lines = [];
+    if (result.created  > 0) lines.push(`**${result.created}** jutsus importados`);
+    if (result.repaired > 0) lines.push(`**${result.repaired}** tipos/ranks corrigidos`);
+    if (lines.length === 0)  lines.push(`Catálogo já sincronizado — ${result.skipped} jutsus sem alteração`);
+    await interaction.editReply(lines.join(" · "));
     return;
   }
 
@@ -953,26 +953,8 @@ function formatJutsuList(
   emptyText: string
 ): string {
   if (jutsus.length === 0) return emptyText;
-
-  const LIMIT = 980; // margem de segurança abaixo de 1024
-  const entries: string[] = [];
-  let total = 0;
-
-  for (const jutsu of jutsus) {
-    const entry = services.jutsus.formatJutsu(jutsu);
-    const sep   = entries.length > 0 ? "\n\n" : "";
-    const cost  = sep.length + entry.length;
-
-    // Se não cabe, para (mas garante ao menos uma entrada)
-    if (entries.length > 0 && total + cost > LIMIT) break;
-
-    entries.push(entry);
-    total += cost;
-  }
-
-  if (entries.length === 0) return emptyText;
-
-  return entries.join("\n\n");
+  // Formato compacto: nome + stats sem descrição — cada entrada ~80 chars, sem risco de overflow
+  return jutsus.map(j => services.jutsus.formatJutsu(j)).join("\n\n");
 }
 
 function parseTypeRankInfo(value: string): {

@@ -240,28 +240,49 @@ export class GuildConfigService {
   public async syncCanonicalJutsus(
     guild: Guild,
     actorId: string
-  ): Promise<{ created: number; skipped: number }> {
+  ): Promise<{ created: number; skipped: number; repaired: number }> {
     const rpgGuild = await this.ensureGuild(guild);
 
     const [allTypes, existingJutsus] = await Promise.all([
       this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } }),
       this.prisma.jutsuDefinition.findMany({
         where: { guildId: rpgGuild.id },
-        select: { key: true }
+        select: { key: true, typeId: true, jutsuRank: true }
       })
     ]);
 
-    const typeMap = new Map(allTypes.map((t) => [t.key, t.id]));
-    const existingKeys = new Set(existingJutsus.map((j) => j.key));
+    const typeMap    = new Map(allTypes.map((t) => [t.key, t.id]));
+    const existingMap = new Map(existingJutsus.map((j) => [j.key, j]));
 
     let created = 0;
     let skipped = 0;
+    let repaired = 0;
 
     for (const jutsu of DEFAULT_JUTSU_DATA) {
-      if (existingKeys.has(jutsu.key)) {
-        skipped++;
+      const existing = existingMap.get(jutsu.key);
+
+      if (existing) {
+        // Reparar typeId ou jutsuRank se estiverem null (seeded antes dos tipos existirem)
+        const canonicalTypeId = typeMap.get(jutsu.typeKey) ?? null;
+        const needsRepair =
+          (canonicalTypeId && existing.typeId !== canonicalTypeId) ||
+          (jutsu.jutsuRank && existing.jutsuRank !== jutsu.jutsuRank);
+
+        if (needsRepair) {
+          await this.prisma.jutsuDefinition.update({
+            where: { guildId_key: { guildId: rpgGuild.id, key: jutsu.key } },
+            data: {
+              ...(canonicalTypeId ? { typeId: canonicalTypeId } : {}),
+              ...(jutsu.jutsuRank ? { jutsuRank: jutsu.jutsuRank } : {})
+            }
+          });
+          repaired++;
+        } else {
+          skipped++;
+        }
         continue;
       }
+
       await this.prisma.jutsuDefinition.create({
         data: {
           guildId: rpgGuild.id,
@@ -288,7 +309,7 @@ export class GuildConfigService {
       });
     }
 
-    return { created, skipped };
+    return { created, skipped: skipped + repaired, repaired };
   }
 
   public async getGuildOverview(guild: Guild): Promise<{
