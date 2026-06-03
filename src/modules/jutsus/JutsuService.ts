@@ -3,8 +3,10 @@ import type { Guild, User } from "discord.js";
 import {
   Prisma,
   type Character,
+  type CharacterProgress,
   type CharacterJutsu,
   type JutsuDefinition,
+  type JutsuUseLog,
   type JutsuType,
   type PrismaClient,
   type RankDefinition
@@ -56,6 +58,34 @@ export interface JutsuOverview {
   totalCount: number;
   activeCount: number;
   learnedCount: number;
+  characterName?: string;
+  currentChakra?: number;
+  maxChakra?: number;
+}
+
+export interface JutsuUseResult {
+  character: Character;
+  jutsu: JutsuWithRelations;
+  log: JutsuUseLog;
+  chakraBefore: number;
+  chakraAfter: number;
+  chakraMax: number;
+}
+
+export type ChakraAdjustMode = "set" | "add" | "full";
+
+export interface ChakraAdjustmentResult {
+  character: Character;
+  progress: CharacterProgress;
+  chakraBefore: number;
+  chakraAfter: number;
+  chakraMax: number;
+}
+
+interface ChakraState {
+  progress: CharacterProgress;
+  current: number;
+  max: number;
 }
 
 export class JutsuRuleError extends Error {
@@ -88,10 +118,15 @@ export class JutsuService {
         : Promise.resolve(0)
     ]);
 
+    const chakraState = character ? await this.getChakraState(rpgGuild.id, character) : null;
+
     return {
       totalCount,
       activeCount,
-      learnedCount
+      learnedCount,
+      characterName: character?.name,
+      currentChakra: chakraState?.current,
+      maxChakra: chakraState?.max
     };
   }
 
@@ -314,6 +349,150 @@ export class JutsuService {
     return learned;
   }
 
+  public async useJutsu(
+    guild: Guild,
+    user: User,
+    identifier: string
+  ): Promise<JutsuUseResult> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const character = await this.characters.findActiveByUser(guild, user.id);
+
+    if (!character) {
+      throw new JutsuRuleError(["Você precisa ter uma ficha ativa para usar jutsus."]);
+    }
+
+    const jutsu = await this.findJutsuByIdentifier(guild, identifier);
+
+    if (!jutsu) {
+      throw new JutsuRuleError(["Não encontrei um jutsu ativo com esse nome ou chave."]);
+    }
+
+    const learned = await this.prisma.characterJutsu.findUnique({
+      where: {
+        characterId_jutsuId: {
+          characterId: character.id,
+          jutsuId: jutsu.id
+        }
+      }
+    });
+
+    if (!learned) {
+      throw new JutsuRuleError([`**${character.name}** ainda não aprendeu **${jutsu.name}**.`]);
+    }
+
+    const chakraState = await this.getChakraState(rpgGuild.id, character);
+    const chakraCost = Math.max(0, jutsu.chakraCost);
+
+    if (chakraState.current < chakraCost) {
+      throw new JutsuRuleError([
+        `**${jutsu.name}** custa **${chakraCost}** de Chakra, mas **${character.name}** tem **${chakraState.current}/${chakraState.max}**.`
+      ]);
+    }
+
+    const chakraAfter = chakraState.current - chakraCost;
+    const progress = await this.prisma.characterProgress.update({
+      where: { id: chakraState.progress.id },
+      data: { currentChakra: chakraAfter }
+    });
+    const log = await this.prisma.jutsuUseLog.create({
+      data: {
+        guildId: rpgGuild.id,
+        characterId: character.id,
+        jutsuId: jutsu.id,
+        actorId: user.id,
+        chakraCost,
+        chakraBefore: chakraState.current,
+        chakraAfter,
+        metadata: {
+          progressId: progress.id
+        }
+      }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId: user.id,
+      action: "jutsu.use",
+      targetType: "JutsuUseLog",
+      targetId: log.id,
+      after: {
+        characterId: character.id,
+        jutsuId: jutsu.id,
+        chakraCost,
+        chakraBefore: chakraState.current,
+        chakraAfter,
+        chakraMax: chakraState.max
+      }
+    });
+
+    return {
+      character,
+      jutsu,
+      log,
+      chakraBefore: chakraState.current,
+      chakraAfter,
+      chakraMax: chakraState.max
+    };
+  }
+
+  public async adjustCharacterChakra(
+    guild: Guild,
+    actorId: string,
+    targetUserId: string,
+    input: { mode: ChakraAdjustMode; amount?: number; reason?: string }
+  ): Promise<ChakraAdjustmentResult> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const character = await this.characters.findActiveByUser(guild, targetUserId);
+
+    if (!character) {
+      throw new JutsuRuleError(["Esse usuário precisa ter uma ficha ativa para ajustar Chakra."]);
+    }
+
+    const chakraState = await this.getChakraState(rpgGuild.id, character);
+    const rawNext =
+      input.mode === "full"
+        ? chakraState.max
+        : input.mode === "add"
+          ? chakraState.current + (input.amount ?? 0)
+          : input.amount ?? chakraState.current;
+    const chakraAfter = clampChakra(rawNext, chakraState.max);
+    const progress = await this.prisma.characterProgress.update({
+      where: { id: chakraState.progress.id },
+      data: { currentChakra: chakraAfter }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "jutsu.chakra.adjust",
+      targetType: "CharacterProgress",
+      targetId: progress.id,
+      before: {
+        characterId: character.id,
+        targetUserId,
+        currentChakra: chakraState.current,
+        maxChakra: chakraState.max
+      },
+      after: {
+        characterId: character.id,
+        targetUserId,
+        mode: input.mode,
+        amount: input.amount,
+        currentChakra: chakraAfter,
+        maxChakra: chakraState.max
+      },
+      reason: input.reason
+    });
+
+    return {
+      character,
+      progress,
+      chakraBefore: chakraState.current,
+      chakraAfter,
+      chakraMax: chakraState.max
+    };
+  }
+
   public formatJutsu(jutsu: JutsuWithRelations): string {
     return [
       `**${jutsu.name}** \`${jutsu.key}\``,
@@ -422,6 +601,39 @@ export class JutsuService {
     }
   }
 
+  private async getChakraState(guildId: string, character: Character): Promise<ChakraState> {
+    const max = Math.max(0, Math.floor(this.characters.getAttributeValues(character).chakra ?? 0));
+    const progress = await this.prisma.characterProgress.upsert({
+      where: { characterId: character.id },
+      update: {},
+      create: {
+        guildId,
+        characterId: character.id,
+        currentChakra: max
+      }
+    });
+    const current = clampChakra(progress.currentChakra ?? max, max);
+
+    if (progress.currentChakra !== current) {
+      const updated = await this.prisma.characterProgress.update({
+        where: { id: progress.id },
+        data: { currentChakra: current }
+      });
+
+      return {
+        progress: updated,
+        current,
+        max
+      };
+    }
+
+    return {
+      progress,
+      current,
+      max
+    };
+  }
+
   private async writeAuditLog(input: {
     guildId: string;
     actorId: string;
@@ -430,6 +642,7 @@ export class JutsuService {
     targetId?: string;
     before?: Prisma.InputJsonValue | null;
     after?: Prisma.InputJsonValue | null;
+    reason?: string;
   }): Promise<void> {
     await this.prisma.auditLog.create({
       data: {
@@ -439,7 +652,8 @@ export class JutsuService {
         targetType: input.targetType,
         targetId: input.targetId,
         before: input.before === null ? Prisma.JsonNull : input.before,
-        after: input.after === null ? Prisma.JsonNull : input.after
+        after: input.after === null ? Prisma.JsonNull : input.after,
+        reason: input.reason
       }
     });
   }
@@ -524,6 +738,10 @@ function serializeJutsu(jutsu: JutsuWithRelations): Prisma.InputJsonObject {
 
 function normalizeJutsuKey(value: string): string {
   return normalizeKey(value) ?? value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function clampChakra(value: number, max: number): number {
+  return Math.max(0, Math.min(max, Math.floor(value)));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

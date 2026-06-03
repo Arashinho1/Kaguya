@@ -7,10 +7,18 @@ export const DEFAULT_CHAKRA_FORMULA = {
   directBonus: 0
 } as const;
 
+export const DEFAULT_TRAINING_CONFIG = {
+  baseCost: 1,
+  costPerCurrentValue: 0,
+  maxIncreasePerAction: 5
+} as const;
+
 export const DEFAULT_MODULE_STATUS = {
   characters: true,
   attributes: true,
-  jutsus: true
+  jutsus: true,
+  training: true,
+  combat: true
 } as const;
 
 export type GuildModuleKey = keyof typeof DEFAULT_MODULE_STATUS;
@@ -34,6 +42,16 @@ export const DEFAULT_MODULES: Array<{
     key: "jutsus",
     name: "Jutsus",
     description: "Catálogo de jutsus, requisitos e aprendizado por personagem."
+  },
+  {
+    key: "training",
+    name: "Treino",
+    description: "Pontos de evolução, custo de treino e progressão dos atributos da ficha."
+  },
+  {
+    key: "combat",
+    name: "Combate",
+    description: "Cenas de combate, participantes, rodadas discretas e ações com jutsus."
   }
 ];
 
@@ -81,6 +99,14 @@ export const DEFAULT_GUILD_SETTINGS = [
     value: DEFAULT_CHAKRA_FORMULA,
     valueType: "JSON",
     isPublic: true
+  },
+  {
+    key: "trainingConfig",
+    label: "Configuração de treino",
+    description: "Define custo e limite de evolução de atributos pelo painel de treino.",
+    value: DEFAULT_TRAINING_CONFIG,
+    valueType: "JSON",
+    isPublic: false
   }
 ] as const;
 

@@ -38,9 +38,18 @@ O prefixo padrão é `.`.
 - `.setup`: cria ou atualiza defaults do servidor, como atributos, ranks e tipos de jutsu.
 - `.ficha`: painel de personagem do jogador.
 - `.atributo`: painel da staff para atributos e fórmula de Chakra.
-- `.jutsu`: painel de catálogo, aprendizado e configuração de jutsus.
+- `.jutsu`: painel de catálogo, aprendizado, uso com Chakra e configuração de jutsus.
+- `.treino`: painel de evolução de atributos com pontos configuráveis por servidor.
+- `.combate @jogador`: inicia um embate direto se as duas fichas estiverem no mesmo local.
+- `.turno`: finaliza sua ação no combate atual e mostra status mínimo.
 
 O painel `Mundo RPG`, dentro do `.config`, gerencia clãs, vilas e ranks por servidor. Esses dados alimentam os vínculos da ficha; clãs, vilas e ranks também podem aplicar bônus de atributo/Chakra e restrições simples como clã permitido, vila permitida, rank permitido, rank mínimo e limite de membros para clãs.
+
+O painel `.treino` permite que jogadores gastem pontos de treino nos atributos base da ficha. A staff concede pontos e configura o custo pelo próprio painel; Chakra não é treinado diretamente, pois continua sendo calculado pela fórmula configurada do servidor.
+
+O painel `.jutsu` permite usar jutsus aprendidos. O uso consome o Chakra atual da ficha conforme o `chakraCost` configurado no catálogo; a staff pode ajustar/restaurar Chakra pelo próprio painel.
+
+O combate foi desenhado para ser discreto. O fluxo principal não usa menu: um jogador inicia com `.combate @jogador`, ações narrativas podem mencionar jutsus entre colchetes, como `[Chidori]`, e `.turno` encerra a ação mostrando um status curto de Chakra. O painel ainda existe em `.combate painel`, mas é opcional.
 
 ## Permissões do bot
 

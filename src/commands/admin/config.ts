@@ -1,6 +1,6 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
 
-import { DEFAULT_MODULES, isGuildModuleKey } from "../../config/defaults.js";
+import { DEFAULT_MODULES, isGuildModuleKey, type GuildModuleKey } from "../../config/defaults.js";
 import { buildConfigPanel } from "../../modules/config-panel/ConfigPanel.js";
 import { ADMIN_COMMAND_PERMISSION } from "../../modules/guild-config/GuildConfigService.js";
 import { sendStaffLog } from "../../services/staffLog.js";
@@ -21,7 +21,7 @@ function parseRoleId(value: string | undefined): string | null {
   return /^\d{15,25}$/.test(roleId) ? roleId : null;
 }
 
-function normalizeModuleAlias(value: string): "characters" | "attributes" | "jutsus" | null {
+function normalizeModuleAlias(value: string): GuildModuleKey | null {
   const key = value.trim().toLowerCase();
 
   if (["ficha", "fichas", "personagem", "personagens"].includes(key)) {
@@ -34,6 +34,14 @@ function normalizeModuleAlias(value: string): "characters" | "attributes" | "jut
 
   if (["jutsu", "jutsus", "tecnica", "tecnicas", "técnica", "técnicas"].includes(key)) {
     return "jutsus";
+  }
+
+  if (["treino", "treinar", "evoluir", "evolucao", "evolução", "progressao", "progressão"].includes(key)) {
+    return "training";
+  }
+
+  if (["combate", "combates", "batalha", "batalhas", "turno", "turnos"].includes(key)) {
+    return "combat";
   }
 
   return isGuildModuleKey(key) ? key : null;

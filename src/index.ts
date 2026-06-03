@@ -6,8 +6,10 @@ import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
+import { CombatService } from "./modules/combat/CombatService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import { JutsuService } from "./modules/jutsus/JutsuService.js";
+import { TrainingService } from "./modules/training/TrainingService.js";
 import { WorldConfigService } from "./modules/world/WorldConfigService.js";
 
 const client = new Client({
@@ -23,12 +25,17 @@ const guildConfig = new GuildConfigService(prisma);
 const attributes = new AttributeService(prisma, guildConfig);
 const world = new WorldConfigService(prisma, guildConfig);
 const characters = new CharacterService(prisma, guildConfig, attributes);
+const training = new TrainingService(prisma, guildConfig, attributes, characters);
+const jutsus = new JutsuService(prisma, guildConfig, characters);
+const combat = new CombatService(prisma, guildConfig, characters, jutsus);
 
 const services = {
   guildConfig,
   attributes,
   characters,
-  jutsus: new JutsuService(prisma, guildConfig, characters),
+  combat,
+  jutsus,
+  training,
   world
 };
 

@@ -2,6 +2,8 @@ import type { Message } from "discord.js";
 
 import { DEFAULT_MODULES, DEFAULT_PREFIX } from "../config/defaults.js";
 import { commands } from "../commands/index.js";
+import { CombatRuleError } from "../modules/combat/CombatService.js";
+import { JutsuRuleError } from "../modules/jutsus/JutsuService.js";
 import { sendCommandUsageLog } from "../services/commandUsageLog.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
@@ -17,6 +19,7 @@ export async function handleMessageCreate(
   const prefix = await services.guildConfig.getPrefix(message.guild).catch(() => DEFAULT_PREFIX);
 
   if (!message.content.startsWith(prefix)) {
+    await handleNarratedCombatAction(message, services);
     return;
   }
 
@@ -62,6 +65,56 @@ export async function handleMessageCreate(
     console.error(`[command:${command.name}]`, error);
     await message.reply("Não consegui executar esse comando. Verifique os logs do bot.");
   }
+}
+
+async function handleNarratedCombatAction(
+  message: Message<true>,
+  services: CommandServices
+): Promise<void> {
+  if (!(await services.guildConfig.isModuleEnabled(message.guild, "combat").catch(() => true))) {
+    return;
+  }
+
+  const identifiers = extractBracketedJutsus(message.content);
+
+  if (identifiers.length === 0) {
+    return;
+  }
+
+  const errors: string[] = [];
+
+  for (const identifier of identifiers) {
+    try {
+      await services.combat.recordNarratedJutsuUse(message.guild, message.author, message.channelId, identifier);
+    } catch (error) {
+      if (error instanceof CombatRuleError || error instanceof JutsuRuleError) {
+        errors.push(`\`${identifier}\`: ${error.message}`);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (errors.length > 0) {
+    await message.reply(`Não registrei o uso de jutsu:\n${errors.slice(0, 3).join("\n")}`);
+  }
+}
+
+function extractBracketedJutsus(content: string): string[] {
+  const identifiers = new Set<string>();
+  const pattern = /\[([^\]\n]{1,120})\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    const identifier = match[1]?.trim();
+
+    if (identifier) {
+      identifiers.add(identifier);
+    }
+  }
+
+  return [...identifiers];
 }
 
 function getAccessDeniedMessage(access: "owner" | "admin" | "member"): string {

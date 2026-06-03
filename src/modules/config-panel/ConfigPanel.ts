@@ -1216,6 +1216,27 @@ function parseRoleId(value: string): string | null {
 
 function parseModuleKey(value: string): GuildModuleKey | null {
   const key = value.trim().toLowerCase();
+
+  if (["ficha", "fichas", "personagem", "personagens"].includes(key)) {
+    return "characters";
+  }
+
+  if (["atributo", "atributos", "chakra"].includes(key)) {
+    return "attributes";
+  }
+
+  if (["jutsu", "jutsus", "tecnica", "tecnicas", "técnica", "técnicas"].includes(key)) {
+    return "jutsus";
+  }
+
+  if (["treino", "treinar", "evoluir", "evolucao", "evolução", "progressao", "progressão"].includes(key)) {
+    return "training";
+  }
+
+  if (["combate", "combates", "batalha", "batalhas", "turno", "turnos"].includes(key)) {
+    return "combat";
+  }
+
   return isGuildModuleKey(key) ? key : null;
 }
 

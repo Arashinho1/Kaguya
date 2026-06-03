@@ -14,7 +14,7 @@ import {
   type User
 } from "discord.js";
 
-import { JutsuRuleError, type JutsuWithRelations } from "./JutsuService.js";
+import { JutsuRuleError, type ChakraAdjustMode, type JutsuWithRelations } from "./JutsuService.js";
 import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -93,7 +93,10 @@ async function buildJutsuEmbed(
         "A staff configura o catálogo; jogadores aprendem com a ficha ativa.",
         "",
         `Jutsus ativos: **${overview.activeCount}/${overview.totalCount}**`,
-        `Seus jutsus aprendidos: **${overview.learnedCount}**`
+        `Seus jutsus aprendidos: **${overview.learnedCount}**`,
+        overview.currentChakra === undefined || overview.maxChakra === undefined
+          ? "Chakra atual: ficha ativa não encontrada"
+          : `Chakra atual: **${overview.currentChakra}/${overview.maxChakra}**`
       ].join("\n")
     );
 
@@ -122,6 +125,7 @@ async function buildJutsuEmbed(
       value: [
         "Use **Catálogo** para ver jutsus disponíveis.",
         "Use **Aprender** para informar nome ou chave técnica do jutsu.",
+        "Use **Usar** para executar um jutsu aprendido e consumir Chakra.",
         "A ficha ativa precisa cumprir rank e requisitos configurados."
       ].join("\n")
     });
@@ -144,6 +148,10 @@ function buildJutsuComponents(canManage: boolean): ActionRowBuilder<ButtonBuilde
       new ButtonBuilder()
         .setCustomId(`${CUSTOM_ID_PREFIX}:learn`)
         .setLabel("Aprender")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`${CUSTOM_ID_PREFIX}:use`)
+        .setLabel("Usar")
         .setStyle(ButtonStyle.Primary)
     )
   ];
@@ -162,6 +170,10 @@ function buildJutsuComponents(canManage: boolean): ActionRowBuilder<ButtonBuilde
         new ButtonBuilder()
           .setCustomId(`${CUSTOM_ID_PREFIX}:rules`)
           .setLabel("Requisitos")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`${CUSTOM_ID_PREFIX}:chakra`)
+          .setLabel("Ajustar Chakra")
           .setStyle(ButtonStyle.Secondary)
       )
     );
@@ -189,6 +201,11 @@ async function handleJutsuButton(
     return;
   }
 
+  if (action === "use") {
+    await interaction.showModal(buildUseJutsuModal());
+    return;
+  }
+
   if (!canManage) {
     await interaction.reply({
       content: "Você precisa ter Administrador, Gerenciar Servidor ou cargo administrativo configurado para editar jutsus.",
@@ -212,6 +229,11 @@ async function handleJutsuButton(
     return;
   }
 
+  if (action === "chakra") {
+    await interaction.showModal(buildChakraAdjustmentModal());
+    return;
+  }
+
   await interaction.reply({
     content: "Ação desconhecida nesse painel.",
     flags: MessageFlags.Ephemeral
@@ -232,6 +254,20 @@ async function handleJutsuModal(
 
     await refreshJutsuMessage(interaction, services, "known");
     await interaction.editReply(`**${learned.jutsu.name}** aprendido pela sua ficha ativa.`);
+    return;
+  }
+
+  if (action === "use") {
+    const identifier = parseRequiredText(interaction.fields.getTextInputValue("identifier"), "Jutsu", 120);
+    const result = await services.jutsus.useJutsu(interaction.guild, interaction.user, identifier);
+
+    await refreshJutsuMessage(interaction, services, "known");
+    await interaction.editReply(
+      [
+        `**${result.character.name}** usou **${result.jutsu.name}**.`,
+        `Chakra: **${result.chakraBefore}** -> **${result.chakraAfter}/${result.chakraMax}**.`
+      ].join("\n")
+    );
     return;
   }
 
@@ -298,6 +334,39 @@ async function handleJutsuModal(
     return;
   }
 
+  if (action === "chakra") {
+    const targetUserId = parseUserId(interaction.fields.getTextInputValue("target"));
+    const adjustment = parseChakraAdjustment(interaction.fields.getTextInputValue("adjustment"));
+    const reason = parseOptionalText(interaction.fields.getTextInputValue("reason"), 200);
+
+    if (!targetUserId) {
+      await interaction.editReply("Informe uma menção ou ID de usuário válido.");
+      return;
+    }
+
+    const result = await services.jutsus.adjustCharacterChakra(
+      interaction.guild,
+      interaction.user.id,
+      targetUserId,
+      {
+        ...adjustment,
+        reason
+      }
+    );
+
+    await sendStaffLogForGuild(interaction.guild, interaction.user, services, {
+      title: "Chakra ajustado",
+      description: [
+        `Ficha: **${result.character.name}** (<@${targetUserId}>)`,
+        `Chakra: **${result.chakraBefore}** -> **${result.chakraAfter}/${result.chakraMax}**`,
+        reason ? `Motivo: ${reason}` : null
+      ].filter((line): line is string => Boolean(line)).join("\n")
+    });
+    await refreshJutsuMessage(interaction, services, "home");
+    await interaction.editReply(`Chakra de **${result.character.name}** ajustado para **${result.chakraAfter}/${result.chakraMax}**.`);
+    return;
+  }
+
   if (action === "rules") {
     const identifier = parseRequiredText(interaction.fields.getTextInputValue("identifier"), "Jutsu", 120);
     const requirements = parseOptionalJsonObject(
@@ -345,6 +414,13 @@ function buildLearnJutsuModal(): ModalBuilder {
     .addComponents(textInputRow("identifier", "Jutsu", "chidori ou Chidori", TextInputStyle.Short, true));
 }
 
+function buildUseJutsuModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:use`)
+    .setTitle("Usar jutsu")
+    .addComponents(textInputRow("identifier", "Jutsu aprendido", "chidori ou Chidori", TextInputStyle.Short, true));
+}
+
 function buildCreateJutsuModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(`${CUSTOM_ID_PREFIX}:modal:create`)
@@ -368,6 +444,17 @@ function buildEditJutsuModal(): ModalBuilder {
       textInputRow("typeRank", "Tipo | Rank mínimo", "ninjutsu | chunin ou - | -", TextInputStyle.Short, false),
       textInputRow("chakraCost", "Custo de Chakra", "10 ou vazio para manter", TextInputStyle.Short, false),
       textInputRow("status", "Status", "ativo, inativo ou vazio para manter", TextInputStyle.Short, false)
+    );
+}
+
+function buildChakraAdjustmentModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:chakra`)
+    .setTitle("Ajustar Chakra")
+    .addComponents(
+      textInputRow("target", "Jogador", "@jogador ou ID", TextInputStyle.Short, true),
+      textInputRow("adjustment", "Ajuste", "full, +10, -5 ou 30", TextInputStyle.Short, true),
+      textInputRow("reason", "Motivo", "Descanso, cena, punição...", TextInputStyle.Paragraph, false)
     );
 }
 
@@ -575,6 +662,30 @@ function parseOptionalJsonObject(
   }
 }
 
+function parseChakraAdjustment(value: string): { mode: ChakraAdjustMode; amount?: number } {
+  const trimmed = value.trim().toLocaleLowerCase("pt-BR");
+
+  if (["full", "cheio", "total", "max", "maximo", "máximo"].includes(trimmed)) {
+    return { mode: "full" };
+  }
+
+  if (/^[+-]\d+$/.test(trimmed)) {
+    return {
+      mode: "add",
+      amount: Number(trimmed)
+    };
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return {
+      mode: "set",
+      amount: Number(trimmed)
+    };
+  }
+
+  throw new JutsuRuleError(["Ajuste de Chakra inválido. Use `full`, `+10`, `-5` ou `30`."]);
+}
+
 function parseClearableOptional(value: string): string | null | undefined {
   const trimmed = value.trim();
 
@@ -583,6 +694,11 @@ function parseClearableOptional(value: string): string | null | undefined {
   }
 
   return ["-", "limpar", "null", "nenhum", "nenhuma"].includes(trimmed.toLowerCase()) ? null : trimmed;
+}
+
+function parseUserId(value: string): string | null {
+  const userId = value.replace(/\D/g, "");
+  return /^\d{15,25}$/.test(userId) ? userId : null;
 }
 
 async function replyPrivately(

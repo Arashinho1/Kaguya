@@ -2,9 +2,11 @@ import type { Interaction } from "discord.js";
 
 import { handleAttributeInteraction } from "../modules/attributes/AttributePanel.js";
 import { handleCharacterInteraction } from "../modules/characters/CharacterPanel.js";
+import { handleCombatInteraction } from "../modules/combat/CombatPanel.js";
 import { handleConfigInteraction } from "../modules/config-panel/ConfigPanel.js";
 import { handleHelpInteraction } from "../modules/help/HelpPanel.js";
 import { handleJutsuInteraction } from "../modules/jutsus/JutsuPanel.js";
+import { handleTrainingInteraction } from "../modules/training/TrainingPanel.js";
 import type { CommandServices } from "../types/command.js";
 
 export async function handleInteractionCreate(
@@ -26,6 +28,18 @@ export async function handleInteractionCreate(
   const jutsuHandled = await handleJutsuInteraction(interaction, services);
 
   if (jutsuHandled) {
+    return;
+  }
+
+  const trainingHandled = await handleTrainingInteraction(interaction, services);
+
+  if (trainingHandled) {
+    return;
+  }
+
+  const combatHandled = await handleCombatInteraction(interaction, services);
+
+  if (combatHandled) {
     return;
   }
 

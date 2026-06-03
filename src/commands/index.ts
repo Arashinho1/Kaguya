@@ -5,9 +5,11 @@ import { setupCommand } from "./admin/setup.js";
 import { attributesCommand } from "./info/attributes.js";
 import { chakraCommand } from "./info/chakra.js";
 import { characterCommand } from "./info/character.js";
+import { combatCommand } from "./info/combat.js";
 import { helpCommand } from "./info/help.js";
 import { jutsuCommand } from "./info/jutsu.js";
 import { pingCommand } from "./info/ping.js";
+import { trainingCommand } from "./info/training.js";
 import type { PrefixCommand } from "../types/command.js";
 
 const commandList: PrefixCommand[] = [
@@ -16,7 +18,9 @@ const commandList: PrefixCommand[] = [
   characterCommand,
   attributesCommand,
   chakraCommand,
+  combatCommand,
   jutsuCommand,
+  trainingCommand,
   setupCommand,
   configCommand,
   attributeCommand,

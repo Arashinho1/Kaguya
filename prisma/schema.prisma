@@ -17,6 +17,12 @@ enum ConfigValueType {
   USER
 }
 
+enum CombatEncounterStatus {
+  OPEN
+  ACTIVE
+  ENDED
+}
+
 model RpgGuild {
   id        String   @id @default(cuid())
   discordId String   @unique
@@ -26,17 +32,23 @@ model RpgGuild {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  settings    GuildSetting[]
-  permissions GuildRolePermission[]
-  auditLogs   AuditLog[]
-  attributes  AttributeDefinition[]
-  clans       Clan[]
-  villages    Village[]
-  ranks       RankDefinition[]
-  jutsuTypes  JutsuType[]
-  jutsus      JutsuDefinition[]
-  characters  Character[]
-  learnedJutsus CharacterJutsu[]
+  settings         GuildSetting[]
+  permissions      GuildRolePermission[]
+  auditLogs        AuditLog[]
+  attributes       AttributeDefinition[]
+  clans            Clan[]
+  villages         Village[]
+  ranks            RankDefinition[]
+  jutsuTypes       JutsuType[]
+  jutsus           JutsuDefinition[]
+  characters       Character[]
+  learnedJutsus    CharacterJutsu[]
+  characterProgress CharacterProgress[]
+  trainingLogs     TrainingLog[]
+  jutsuUseLogs     JutsuUseLog[]
+  combatEncounters CombatEncounter[]
+  combatParticipants CombatParticipant[]
+  combatActionLogs CombatActionLog[]
 
   @@map("rpg_guilds")
 }
@@ -193,6 +205,8 @@ model JutsuDefinition {
   type         JutsuType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
   requiredRank RankDefinition? @relation(fields: [requiredRankId], references: [id], onDelete: SetNull)
   learnedBy    CharacterJutsu[]
+  useLogs      JutsuUseLog[]
+  combatActionLogs CombatActionLog[]
 
   @@unique([guildId, key])
   @@index([guildId])
@@ -220,6 +234,11 @@ model Character {
   village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
   rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
   learnedJutsus CharacterJutsu[]
+  progress      CharacterProgress?
+  trainingLogs  TrainingLog[]
+  jutsuUseLogs  JutsuUseLog[]
+  combatParticipants CombatParticipant[]
+  combatActionLogs CombatActionLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -242,6 +261,130 @@ model CharacterJutsu {
   @@index([guildId, characterId])
   @@index([guildId, jutsuId])
   @@map("character_jutsus")
+}
+
+model CharacterProgress {
+  id             String   @id @default(cuid())
+  guildId        String
+  characterId    String   @unique
+  trainingPoints Int      @default(0)
+  experience     Int      @default(0)
+  currentChakra  Int?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId])
+  @@map("character_progress")
+}
+
+model JutsuUseLog {
+  id           String   @id @default(cuid())
+  guildId      String
+  characterId  String
+  jutsuId      String
+  actorId      String
+  chakraCost   Int      @default(0)
+  chakraBefore Int      @default(0)
+  chakraAfter  Int      @default(0)
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  jutsu     JutsuDefinition @relation(fields: [jutsuId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@index([guildId, jutsuId, createdAt])
+  @@map("jutsu_use_logs")
+}
+
+model CombatEncounter {
+  id        String                @id @default(cuid())
+  guildId   String
+  channelId String
+  name      String
+  status    CombatEncounterStatus @default(OPEN)
+  round     Int                   @default(1)
+  turnIndex Int                   @default(0)
+  metadata  Json                  @default("{}")
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  guild        RpgGuild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  participants CombatParticipant[]
+  actionLogs   CombatActionLog[]
+
+  @@index([guildId, channelId, status])
+  @@index([guildId, updatedAt])
+  @@map("combat_encounters")
+}
+
+model CombatParticipant {
+  id          String   @id @default(cuid())
+  guildId     String
+  encounterId String
+  characterId String
+  userId      String
+  initiative  Int      @default(0)
+  isActive    Boolean  @default(true)
+  joinedAt    DateTime @default(now())
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  encounter CombatEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([encounterId, characterId])
+  @@index([guildId, userId])
+  @@index([guildId, encounterId])
+  @@map("combat_participants")
+}
+
+model CombatActionLog {
+  id          String   @id @default(cuid())
+  guildId     String
+  encounterId String
+  characterId String?
+  jutsuId     String?
+  actorId     String
+  action      String
+  summary     String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  guild     RpgGuild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  encounter CombatEncounter  @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  character Character?       @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  jutsu     JutsuDefinition? @relation(fields: [jutsuId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, encounterId, createdAt])
+  @@index([guildId, actorId, createdAt])
+  @@map("combat_action_logs")
+}
+
+model TrainingLog {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  actorId     String
+  action      String
+  attributeKey String?
+  amount      Int      @default(0)
+  cost        Int      @default(0)
+  before      Json?
+  after       Json?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@index([guildId, actorId, createdAt])
+  @@map("training_logs")
 }
 
 model AuditLog {

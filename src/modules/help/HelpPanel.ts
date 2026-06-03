@@ -36,8 +36,23 @@ const PLAYER_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "jutsu",
-    description: "Painel de jutsus: catálogo, jutsus aprendidos e aprendizado pela ficha ativa.",
+    description: "Painel de jutsus: catálogo, aprendizado, jutsus conhecidos e uso consumindo Chakra.",
     aliases: "jutsus, tecnica, tecnicas"
+  },
+  {
+    command: "treino",
+    description: "Painel de evolução: mostra pontos de treino e permite gastar em atributos da ficha.",
+    aliases: "treinar, evoluir"
+  },
+  {
+    command: "combate",
+    description: "Inicia embate ao mencionar um jogador no mesmo local e mostra status mínimo da cena.",
+    aliases: "batalha"
+  },
+  {
+    command: "turno",
+    description: "Finaliza sua ação no combate atual e mostra um status curto de Chakra.",
+    aliases: "turnos"
   },
   {
     command: "ping",
@@ -68,8 +83,18 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
   },
   {
     command: "jutsu",
-    description: "O mesmo painel libera botões de staff para criar, editar e configurar requisitos de jutsus.",
+    description: "O mesmo painel libera botões de staff para criar, editar, configurar requisitos e ajustar Chakra.",
     aliases: "jutsus, tecnica, tecnicas"
+  },
+  {
+    command: "treino",
+    description: "O mesmo painel libera botões de staff para conceder pontos e configurar custo de evolução.",
+    aliases: "treinar, evoluir"
+  },
+  {
+    command: "combate",
+    description: "O painel opcional fica em `.combate painel`; o fluxo principal é direto para não poluir cenas.",
+    aliases: "batalha"
   }
 ];
 
@@ -144,7 +169,7 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
         "",
         `Prefixo atual: \`${prefix}\``,
         "",
-        "**Jogador** mostra ficha, atributos, Chakra e jutsus.",
+        "**Jogador** mostra ficha, atributos, Chakra, jutsus, treino e combate.",
         "**Staff** mostra configurações e painéis administrativos.",
         "**Dono** mostra comandos globais da aplicação.",
         "",
@@ -170,7 +195,7 @@ function buildHelpSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
           .setValue("home"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Jogador")
-          .setDescription("Ficha, atributos, Chakra e comandos públicos.")
+          .setDescription("Ficha, atributos, Chakra, jutsus, treino e combate.")
           .setValue("player"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Staff")

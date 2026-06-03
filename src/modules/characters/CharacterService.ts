@@ -48,6 +48,12 @@ export interface UpdateCharacterInput {
   rankId?: string | null;
 }
 
+export interface CharacterAttributeAdjustment {
+  character: CharacterWithRelations;
+  beforeBaseAttributes: Record<string, number>;
+  afterBaseAttributes: Record<string, number>;
+}
+
 export interface CharacterLinkInput {
   clan?: string | null;
   village?: string | null;
@@ -313,6 +319,75 @@ export class CharacterService {
     return updated;
   }
 
+  public async adjustActiveCharacterBaseAttributes(
+    guild: Guild,
+    actorId: string,
+    userId: string,
+    deltas: Record<string, number>,
+    options: { action?: string; reason?: string } = {}
+  ): Promise<CharacterAttributeAdjustment | null> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const current = await this.findActiveByUser(guild, userId);
+
+    if (!current) {
+      return null;
+    }
+
+    const beforeBaseAttributes = this.getBaseAttributeValues(current);
+    const afterBaseAttributes = { ...beforeBaseAttributes };
+
+    for (const [key, delta] of Object.entries(deltas)) {
+      if (key === "chakra" || !Number.isFinite(delta) || delta === 0) {
+        continue;
+      }
+
+      afterBaseAttributes[key] = (afterBaseAttributes[key] ?? 0) + delta;
+    }
+
+    const attributeBuild = await this.buildCharacterAttributes(
+      guild,
+      {
+        clanId: current.clanId,
+        villageId: current.villageId,
+        rankId: current.rankId
+      },
+      afterBaseAttributes
+    );
+
+    const updated = await this.prisma.character.update({
+      where: { id: current.id },
+      data: {
+        attributes: attributeBuild.values,
+        metadata: this.withWorldBonusMetadata(this.getMetadata(current), attributeBuild) as Prisma.InputJsonValue
+      },
+      include: CHARACTER_INCLUDE
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: options.action ?? "character.attributes.adjust",
+      targetType: "Character",
+      targetId: updated.id,
+      before: {
+        baseAttributes: beforeBaseAttributes,
+        attributes: current.attributes as Prisma.InputJsonValue
+      },
+      after: {
+        deltas,
+        baseAttributes: afterBaseAttributes,
+        attributes: updated.attributes as Prisma.InputJsonValue
+      },
+      reason: options.reason
+    });
+
+    return {
+      character: updated,
+      beforeBaseAttributes,
+      afterBaseAttributes
+    };
+  }
+
   public async setCharacterActive(
     guild: Guild,
     actor: User,
@@ -561,7 +636,7 @@ export class CharacterService {
     };
   }
 
-  private getBaseAttributeValues(character: Character): Record<string, number> {
+  public getBaseAttributeValues(character: Character): Record<string, number> {
     const currentValues = this.getAttributeValues(character);
     const bonusSnapshot = this.getMetadata(character).worldBonusSnapshot ?? {};
     const baseValues = { ...currentValues };
@@ -707,6 +782,7 @@ export class CharacterService {
     targetId?: string;
     before?: Prisma.InputJsonValue | null;
     after?: Prisma.InputJsonValue | null;
+    reason?: string;
   }): Promise<void> {
     await this.prisma.auditLog.create({
       data: {
@@ -716,7 +792,8 @@ export class CharacterService {
         targetType: input.targetType,
         targetId: input.targetId,
         before: input.before === null ? Prisma.JsonNull : input.before,
-        after: input.after === null ? Prisma.JsonNull : input.after
+        after: input.after === null ? Prisma.JsonNull : input.after,
+        reason: input.reason
       }
     });
   }
