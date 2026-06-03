@@ -9,7 +9,8 @@ export const DEFAULT_CHAKRA_FORMULA = {
 
 export const DEFAULT_MODULE_STATUS = {
   characters: true,
-  attributes: true
+  attributes: true,
+  jutsus: true
 } as const;
 
 export type GuildModuleKey = keyof typeof DEFAULT_MODULE_STATUS;
@@ -28,6 +29,11 @@ export const DEFAULT_MODULES: Array<{
     key: "attributes",
     name: "Atributos e Chakra",
     description: "Atributos configuráveis, fórmula de Chakra e painel de atributos."
+  },
+  {
+    key: "jutsus",
+    name: "Jutsus",
+    description: "Catálogo de jutsus, requisitos e aprendizado por personagem."
   }
 ];
 

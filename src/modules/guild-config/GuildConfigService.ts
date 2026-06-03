@@ -182,16 +182,18 @@ export class GuildConfigService {
     attributesCount: number;
     ranksCount: number;
     jutsuTypesCount: number;
+    jutsusCount: number;
     activeModulesCount: number;
     modulesCount: number;
   }> {
     const rpgGuild = await this.ensureGuild(guild);
 
-    const [settingsCount, attributesCount, ranksCount, jutsuTypesCount, moduleStatus] = await Promise.all([
+    const [settingsCount, attributesCount, ranksCount, jutsuTypesCount, jutsusCount, moduleStatus] = await Promise.all([
       this.prisma.guildSetting.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.attributeDefinition.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id } }),
       this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id } }),
+      this.prisma.jutsuDefinition.count({ where: { guildId: rpgGuild.id } }),
       this.getModuleStatus(guild)
     ]);
     const modules = Object.values(moduleStatus);
@@ -202,6 +204,7 @@ export class GuildConfigService {
       attributesCount,
       ranksCount,
       jutsuTypesCount,
+      jutsusCount,
       activeModulesCount: modules.filter(Boolean).length,
       modulesCount: modules.length
     };

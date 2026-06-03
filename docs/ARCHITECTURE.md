@@ -17,7 +17,9 @@ O banco é multi-servidor. Tudo que pertence a uma campanha ou RPG carrega refer
 - `Village`
 - `RankDefinition`
 - `JutsuType`
+- `JutsuDefinition`
 - `Character`
+- `CharacterJutsu`
 - `AuditLog`
 
 ## Contrato de cada módulo
@@ -106,7 +108,17 @@ Dados atuais:
 
 O uso oficial é pelo painel com lista suspensa e modais. A ficha só aceita vínculos com registros ativos do servidor.
 
-Esses dados são parte do esqueleto configurável do RPG. Bônus, restrições e metadados ainda não aplicam efeitos automáticos por conta própria; eles ficam persistidos para módulos futuros consumirem de forma padronizada.
+Os dados do Mundo RPG já aplicam efeitos básicos na ficha:
+
+- `Clan.memberLimit` limita quantas fichas ativas podem usar o clã.
+- `Clan.bonuses` aceita bônus numéricos por chave de atributo. Exemplo: `{"forca":2,"velocidade":1,"chakra":10}`.
+- `Village.metadata` e `RankDefinition.metadata` aceitam bônus no campo `bonuses`. Exemplo: `{"bonuses":{"resistencia":1,"chakra":5}}`.
+- `chakra` em `bonuses` é tratado como bônus direto depois da fórmula de Chakra.
+- `Clan.restrictions`, `Village.metadata.restrictions` e `RankDefinition.metadata.restrictions` aceitam regras simples como `{"cla":"Uchiha"}`, `{"vila":"Konoha"}`, `{"vilas":["Konoha","Suna"]}`, `{"rank":"genin"}`, `{"ranks":["genin","chunin"]}` e `{"rank_minimo":"chunin"}`.
+
+Ao criar, editar, reativar ou recalcular uma ficha, o bot valida essas regras e recalcula os atributos efetivos. O snapshot do bônus aplicado fica no metadata da ficha para evitar bônus duplicado em recalculos futuros.
+
+Outros metadados livres continuam persistidos para módulos futuros consumirem de forma padronizada.
 
 ## Chakra derivado
 
@@ -131,6 +143,39 @@ Comandos:
 - `.atributo chakra`: mostra a configuração para staff;
 - `.atributo chakra forca,velocidade,resistencia | 1 | 0 | 1`: altera atributos, multiplicador da soma, bônus direto e multiplicador isolado.
 
+## Módulo de jutsus
+
+O comando `.jutsu` é menu-first. Ele abre um painel público para jogadores e, quando usado por staff, exibe botões administrativos no mesmo painel.
+
+Dados atuais:
+
+- `JutsuType`: tipo/categoria do jutsu, criado por defaults do `.setup`.
+- `JutsuDefinition`: catálogo de jutsus do servidor, com chave técnica, nome, descrição, tipo, rank mínimo, custo de Chakra, requisitos, metadados e status ativo/inativo.
+- `CharacterJutsu`: vínculo entre ficha e jutsu aprendido.
+
+Fluxo do jogador:
+
+- ver catálogo ativo;
+- ver jutsus aprendidos pela ficha ativa;
+- aprender um jutsu informando nome ou chave.
+
+Fluxo da staff:
+
+- criar jutsu;
+- editar nome, tipo, rank mínimo, custo e status;
+- configurar requisitos e metadados em JSON.
+
+Requisitos aceitos em `JutsuDefinition.requirements`:
+
+```json
+{
+  "atributos": { "ninjutsu": 5 },
+  "jutsus": ["raiton_basico"]
+}
+```
+
+O campo `requiredRankId` valida rank mínimo pela ordem do rank. O campo `chakraCost` registra custo de uso do jutsu, mas nesta primeira versão não consome Chakra ao aprender.
+
 ## Módulo de ficha
 
 O comando `.ficha` é menu-first. Se o jogador ainda não tiver ficha, o bot mostra um painel com botão para criar. A criação acontece por modal.
@@ -145,9 +190,11 @@ A ficha salva:
 - vínculo com rank;
 - snapshot dos atributos ativos do servidor;
 - Chakra derivado pela fórmula configurada;
+- bônus do Mundo RPG aplicados aos atributos efetivos;
+- jutsus aprendidos vinculados por `CharacterJutsu`;
 - status ativo/inativo.
 
-Clã, vila e rank são vínculos reais com `Clan`, `Village` e `RankDefinition`. O jogador pode editar os vínculos pelo modal da ficha usando nome, chave ou ID quando aplicável. Uma ficha inativa pode ser reativada pelo painel do próprio jogador.
+Clã, vila e rank são vínculos reais com `Clan`, `Village` e `RankDefinition`. O jogador pode editar os vínculos pelo modal da ficha usando nome, chave ou ID quando aplicável. Uma ficha inativa pode ser reativada pelo painel do próprio jogador, desde que ainda respeite as regras do clã configurado.
 
 Comandos atuais:
 

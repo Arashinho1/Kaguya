@@ -197,6 +197,7 @@ async function buildConfigEmbed(
       { name: "Clãs", value: `${worldOverview.activeClansCount}/${worldOverview.clansCount} ativos`, inline: true },
       { name: "Vilas", value: `${worldOverview.activeVillagesCount}/${worldOverview.villagesCount} ativas`, inline: true },
       { name: "Ranks", value: `${worldOverview.activeRanksCount}/${worldOverview.ranksCount} ativos`, inline: true },
+      { name: "Jutsus", value: String(overview.jutsusCount), inline: true },
       { name: "Tipos de jutsu", value: String(overview.jutsuTypesCount), inline: true }
     );
 
@@ -245,7 +246,8 @@ async function buildConfigEmbed(
         `Vilas: **${worldOverview.activeVillagesCount}/${worldOverview.villagesCount} ativas**`,
         `Ranks: **${worldOverview.activeRanksCount}/${worldOverview.ranksCount} ativos**`,
         "",
-        "Use a lista de dados do RPG para listar, criar, editar ou ajustar metadados."
+        "Use a lista de dados do RPG para listar, criar, editar ou ajustar metadados.",
+        "Bônus e restrições de clã, vila e rank já afetam a ficha."
       ].join("\n")
     });
   } else if (page === "worldClans") {
@@ -466,7 +468,7 @@ function buildWorldSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
           .setValue("edit:village"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Metadados da vila")
-          .setDescription("Ajusta metadados técnicos em JSON.")
+          .setDescription("Ajusta bônus, restrições e metadados em JSON.")
           .setValue("advanced:village"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Listar ranks")
@@ -482,7 +484,7 @@ function buildWorldSelect(): ActionRowBuilder<StringSelectMenuBuilder> {
           .setValue("edit:rank"),
         new StringSelectMenuOptionBuilder()
           .setLabel("Metadados do rank")
-          .setDescription("Ajusta metadados técnicos em JSON.")
+          .setDescription("Ajusta bônus, restrições e metadados em JSON.")
           .setValue("advanced:rank")
       )
   );
@@ -568,8 +570,8 @@ function buildWorldCreateModal(entity: WorldEntityType): ModalBuilder {
         textInputRow("name", "Nome", "Uchiha", TextInputStyle.Short, true),
         textInputRow("description", "Descrição", "Descrição curta do clã", TextInputStyle.Paragraph, false),
         textInputRow("memberLimit", "Limite de membros", "5 ou vazio para sem limite", TextInputStyle.Short, false),
-        textInputRow("bonuses", "Bônus JSON", "{\"chakra\":10}", TextInputStyle.Paragraph, false),
-        textInputRow("restrictions", "Restrições JSON", "{\"rank_minimo\":\"genin\"}", TextInputStyle.Paragraph, false)
+        textInputRow("bonuses", "Bônus JSON", "{\"forca\":2,\"chakra\":10}", TextInputStyle.Paragraph, false),
+        textInputRow("restrictions", "Restrições JSON", "{\"vila\":\"Konoha\",\"rank_minimo\":\"genin\"}", TextInputStyle.Paragraph, false)
       );
   }
 
@@ -580,7 +582,7 @@ function buildWorldCreateModal(entity: WorldEntityType): ModalBuilder {
       .addComponents(
         textInputRow("name", "Nome", "Konoha", TextInputStyle.Short, true),
         textInputRow("description", "Descrição", "Descrição curta da vila", TextInputStyle.Paragraph, false),
-        textInputRow("metadata", "Metadados JSON", "{\"pais\":\"Fogo\"}", TextInputStyle.Paragraph, false)
+        textInputRow("metadata", "Metadados JSON", "{\"pais\":\"Fogo\",\"bonuses\":{\"resistencia\":1}}", TextInputStyle.Paragraph, false)
       );
   }
 
@@ -592,7 +594,7 @@ function buildWorldCreateModal(entity: WorldEntityType): ModalBuilder {
       textInputRow("name", "Nome", "Tokubetsu Jonin", TextInputStyle.Short, true),
       textInputRow("sortOrder", "Ordem", "35", TextInputStyle.Short, false),
       textInputRow("description", "Descrição", "Descrição curta do rank", TextInputStyle.Paragraph, false),
-      textInputRow("metadata", "Metadados JSON", "{\"nivel\":4}", TextInputStyle.Paragraph, false)
+      textInputRow("metadata", "Metadados JSON", "{\"nivel\":4,\"bonuses\":{\"chakra\":5}}", TextInputStyle.Paragraph, false)
     );
 }
 
@@ -641,8 +643,8 @@ function buildWorldAdvancedModal(entity: WorldEntityType): ModalBuilder {
       .setTitle("Regras avançadas do clã")
       .addComponents(
         textInputRow("identifier", "Nome ou ID do clã", "Uchiha", TextInputStyle.Short, true),
-        textInputRow("bonuses", "Bônus JSON", "{\"chakra\":10}", TextInputStyle.Paragraph, false),
-        textInputRow("restrictions", "Restrições JSON", "{\"rank_minimo\":\"genin\"}", TextInputStyle.Paragraph, false)
+        textInputRow("bonuses", "Bônus JSON", "{\"forca\":2,\"chakra\":10}", TextInputStyle.Paragraph, false),
+        textInputRow("restrictions", "Restrições JSON", "{\"vila\":\"Konoha\",\"rank_minimo\":\"genin\"}", TextInputStyle.Paragraph, false)
       );
   }
 
@@ -652,7 +654,7 @@ function buildWorldAdvancedModal(entity: WorldEntityType): ModalBuilder {
       .setTitle("Metadados da vila")
       .addComponents(
         textInputRow("identifier", "Nome ou ID da vila", "Konoha", TextInputStyle.Short, true),
-        textInputRow("metadata", "Metadados JSON", "{\"pais\":\"Fogo\"}", TextInputStyle.Paragraph, false)
+        textInputRow("metadata", "Metadados JSON", "{\"bonuses\":{\"resistencia\":1},\"restrictions\":{\"rank_minimo\":\"genin\"}}", TextInputStyle.Paragraph, false)
       );
   }
 
@@ -661,7 +663,7 @@ function buildWorldAdvancedModal(entity: WorldEntityType): ModalBuilder {
     .setTitle("Metadados do rank")
     .addComponents(
       textInputRow("identifier", "Chave, nome ou ID do rank", "genin", TextInputStyle.Short, true),
-      textInputRow("metadata", "Metadados JSON", "{\"nivel\":2}", TextInputStyle.Paragraph, false)
+      textInputRow("metadata", "Metadados JSON", "{\"bonuses\":{\"chakra\":5},\"restrictions\":{\"vila\":\"Konoha\"}}", TextInputStyle.Paragraph, false)
     );
 }
 

@@ -34,7 +34,9 @@ model RpgGuild {
   villages    Village[]
   ranks       RankDefinition[]
   jutsuTypes  JutsuType[]
+  jutsus      JutsuDefinition[]
   characters  Character[]
+  learnedJutsus CharacterJutsu[]
 
   @@map("rpg_guilds")
 }
@@ -146,6 +148,7 @@ model RankDefinition {
 
   guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   characters Character[]
+  requiredJutsus JutsuDefinition[]
 
   @@unique([guildId, key])
   @@index([guildId])
@@ -164,10 +167,38 @@ model JutsuType {
   updatedAt   DateTime @updatedAt
 
   guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  jutsus JutsuDefinition[]
 
   @@unique([guildId, key])
   @@index([guildId])
   @@map("jutsu_types")
+}
+
+model JutsuDefinition {
+  id             String   @id @default(cuid())
+  guildId        String
+  key            String
+  name           String
+  description    String?
+  typeId         String?
+  requiredRankId String?
+  chakraCost     Int      @default(0)
+  requirements   Json     @default("{}")
+  metadata       Json     @default("{}")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guild        RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  type         JutsuType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  requiredRank RankDefinition? @relation(fields: [requiredRankId], references: [id], onDelete: SetNull)
+  learnedBy    CharacterJutsu[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@index([typeId])
+  @@index([requiredRankId])
+  @@map("jutsu_definitions")
 }
 
 model Character {
@@ -188,10 +219,29 @@ model Character {
   clan    Clan?           @relation(fields: [clanId], references: [id], onDelete: SetNull)
   village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
   rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
+  learnedJutsus CharacterJutsu[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
   @@map("characters")
+}
+
+model CharacterJutsu {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  jutsuId     String
+  learnedAt   DateTime @default(now())
+  metadata    Json     @default("{}")
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  jutsu     JutsuDefinition @relation(fields: [jutsuId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, jutsuId])
+  @@index([guildId, characterId])
+  @@index([guildId, jutsuId])
+  @@map("character_jutsus")
 }
 
 model AuditLog {

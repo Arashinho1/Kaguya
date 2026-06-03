@@ -14,7 +14,7 @@ import {
   type User
 } from "discord.js";
 
-import type { CharacterWithRelations } from "./CharacterService.js";
+import { CharacterRuleError, type CharacterWithRelations } from "./CharacterService.js";
 import type { CommandServices } from "../../types/command.js";
 
 const CUSTOM_ID_PREFIX = "kaguya:characters";
@@ -117,11 +117,29 @@ export async function handleCharacterInteraction(
   }
 
   if (interaction.isButton()) {
-    await handleCharacterButton(interaction, services);
+    try {
+      await handleCharacterButton(interaction, services);
+    } catch (error) {
+      if (error instanceof CharacterRuleError) {
+        await replyPrivately(interaction, error.message);
+        return true;
+      }
+
+      throw error;
+    }
     return true;
   }
 
-  await handleCharacterModal(interaction, services);
+  try {
+    await handleCharacterModal(interaction, services);
+  } catch (error) {
+    if (error instanceof CharacterRuleError) {
+      await replyPrivately(interaction, error.message);
+      return true;
+    }
+
+    throw error;
+  }
   return true;
 }
 
@@ -132,6 +150,7 @@ function renderCharacterEmbed(
 ): EmbedBuilder {
   const metadata = services.characters.getMetadata(character);
   const attributes = services.characters.getAttributeValues(character);
+  const worldEffectSummary = services.characters.getWorldEffectSummary(character);
   const attributeLines = Object.entries(attributes)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `\`${key}\`: **${value}**`);
@@ -161,6 +180,13 @@ function renderCharacterEmbed(
 
   if (metadata.imageUrl) {
     embed.setImage(metadata.imageUrl);
+  }
+
+  if (worldEffectSummary) {
+    embed.addFields({
+      name: "Bônus ativos",
+      value: worldEffectSummary
+    });
   }
 
   return embed;

@@ -38,8 +38,9 @@ O prefixo padrão é `.`.
 - `.setup`: cria ou atualiza defaults do servidor, como atributos, ranks e tipos de jutsu.
 - `.ficha`: painel de personagem do jogador.
 - `.atributo`: painel da staff para atributos e fórmula de Chakra.
+- `.jutsu`: painel de catálogo, aprendizado e configuração de jutsus.
 
-O painel `Mundo RPG`, dentro do `.config`, gerencia clãs, vilas e ranks por servidor. Esses dados alimentam os vínculos da ficha.
+O painel `Mundo RPG`, dentro do `.config`, gerencia clãs, vilas e ranks por servidor. Esses dados alimentam os vínculos da ficha; clãs, vilas e ranks também podem aplicar bônus de atributo/Chakra e restrições simples como clã permitido, vila permitida, rank permitido, rank mínimo e limite de membros para clãs.
 
 ## Permissões do bot
 

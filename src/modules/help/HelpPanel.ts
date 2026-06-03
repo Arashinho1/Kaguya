@@ -35,6 +35,11 @@ const PLAYER_COMMANDS: HelpCommandEntry[] = [
     description: "Mostra como o Chakra é calculado neste servidor."
   },
   {
+    command: "jutsu",
+    description: "Painel de jutsus: catálogo, jutsus aprendidos e aprendizado pela ficha ativa.",
+    aliases: "jutsus, tecnica, tecnicas"
+  },
+  {
     command: "ping",
     description: "Confirma se o bot está respondendo."
   },
@@ -60,6 +65,11 @@ const STAFF_COMMANDS: HelpCommandEntry[] = [
     command: "atributo",
     description: "Painel de atributos: cria, edita, remove e configura a fórmula de Chakra.",
     aliases: "attr"
+  },
+  {
+    command: "jutsu",
+    description: "O mesmo painel libera botões de staff para criar, editar e configurar requisitos de jutsus.",
+    aliases: "jutsus, tecnica, tecnicas"
   }
 ];
 
@@ -134,7 +144,7 @@ function buildHelpEmbed(prefix: string, page: HelpPage): EmbedBuilder {
         "",
         `Prefixo atual: \`${prefix}\``,
         "",
-        "**Jogador** mostra ficha, atributos e Chakra.",
+        "**Jogador** mostra ficha, atributos, Chakra e jutsus.",
         "**Staff** mostra configurações e painéis administrativos.",
         "**Dono** mostra comandos globais da aplicação.",
         "",

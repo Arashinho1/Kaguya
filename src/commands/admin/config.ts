@@ -21,7 +21,7 @@ function parseRoleId(value: string | undefined): string | null {
   return /^\d{15,25}$/.test(roleId) ? roleId : null;
 }
 
-function normalizeModuleAlias(value: string): "characters" | "attributes" | null {
+function normalizeModuleAlias(value: string): "characters" | "attributes" | "jutsus" | null {
   const key = value.trim().toLowerCase();
 
   if (["ficha", "fichas", "personagem", "personagens"].includes(key)) {
@@ -30,6 +30,10 @@ function normalizeModuleAlias(value: string): "characters" | "attributes" | null
 
   if (["atributo", "atributos", "chakra"].includes(key)) {
     return "attributes";
+  }
+
+  if (["jutsu", "jutsus", "tecnica", "tecnicas", "técnica", "técnicas"].includes(key)) {
+    return "jutsus";
   }
 
   return isGuildModuleKey(key) ? key : null;

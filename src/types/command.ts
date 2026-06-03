@@ -4,12 +4,14 @@ import type { GuildModuleKey } from "../config/defaults.js";
 import type { AttributeService } from "../modules/attributes/AttributeService.js";
 import type { CharacterService } from "../modules/characters/CharacterService.js";
 import type { GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
+import type { JutsuService } from "../modules/jutsus/JutsuService.js";
 import type { WorldConfigService } from "../modules/world/WorldConfigService.js";
 
 export interface CommandServices {
   attributes: AttributeService;
   characters: CharacterService;
   guildConfig: GuildConfigService;
+  jutsus: JutsuService;
   world: WorldConfigService;
 }
 
