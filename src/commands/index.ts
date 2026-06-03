@@ -1,5 +1,6 @@
 import { attributeCommand } from "./admin/attribute.js";
 import { configCommand } from "./admin/config.js";
+import { paCommand } from "./admin/pa.js";
 import { serversCommand } from "./admin/servers.js";
 import { setupCommand } from "./admin/setup.js";
 import { attributesCommand } from "./info/attributes.js";
@@ -24,6 +25,7 @@ const commandList: PrefixCommand[] = [
   setupCommand,
   configCommand,
   attributeCommand,
+  paCommand,
   serversCommand
 ];
 

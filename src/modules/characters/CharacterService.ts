@@ -552,6 +552,137 @@ export class CharacterService {
     return bonusLines.length > 0 ? bonusLines.join("\n") : null;
   }
 
+  public async adjustPA(
+    guild: Guild,
+    actorId: string,
+    targetUserId: string,
+    delta: number
+  ): Promise<{ characterName: string; newPA: number; reversed: { attr: string; amount: number }[] }> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const character = await this.findActiveByUser(guild, targetUserId);
+
+    if (!character) {
+      throw new CharacterRuleError(["Esse jogador não tem uma ficha ativa neste servidor."]);
+    }
+
+    const progress = await this.prisma.characterProgress.upsert({
+      where: { characterId: character.id },
+      update: {},
+      create: { guildId: rpgGuild.id, characterId: character.id, trainingPoints: 0 }
+    });
+
+    const currentPA = progress.trainingPoints;
+
+    // ── DAR PA (simples) ──────────────────────────────────────────────────────
+    if (delta >= 0) {
+      const newPA = currentPA + delta;
+      await this.prisma.characterProgress.update({
+        where: { id: progress.id },
+        data: { trainingPoints: newPA }
+      });
+      await this.writeAuditLog({
+        guildId: rpgGuild.id, actorId,
+        action: "character.pa.give",
+        targetType: "Character", targetId: character.id,
+        before: { trainingPoints: currentPA },
+        after:  { trainingPoints: newPA }
+      });
+      return { characterName: character.name, newPA, reversed: [] };
+    }
+
+    // ── REMOVER PA (com reversão automática de distribuições) ─────────────────
+    const takeAmount = Math.abs(delta);
+
+    // Caso simples: PA livre é suficiente
+    if (currentPA >= takeAmount) {
+      const newPA = currentPA - takeAmount;
+      await this.prisma.characterProgress.update({
+        where: { id: progress.id },
+        data: { trainingPoints: newPA }
+      });
+      await this.writeAuditLog({
+        guildId: rpgGuild.id, actorId,
+        action: "character.pa.take",
+        targetType: "Character", targetId: character.id,
+        before: { trainingPoints: currentPA },
+        after:  { trainingPoints: newPA }
+      });
+      return { characterName: character.name, newPA, reversed: [] };
+    }
+
+    // Caso com déficit: rever últimas distribuições para cobrir a diferença
+    const deficit = takeAmount - currentPA;
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        guildId:    rpgGuild.id,
+        action:     "character.pa.distribute",
+        targetId:   character.id
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    const currentAttrs = this.getAttributeValues(character);
+    const updatedAttrs: Record<string, number> = { ...currentAttrs };
+    const reversed: { attr: string; amount: number }[] = [];
+    let remaining = deficit;
+
+    for (const log of logs) {
+      if (remaining <= 0) break;
+
+      const bef = (log.before ?? {}) as Record<string, unknown>;
+      const aft = (log.after  ?? {}) as Record<string, unknown>;
+
+      // Encontrar qual atributo foi aumentado neste log
+      for (const key of ["forca", "velocidade", "resistencia"]) {
+        const beforeVal = Number(bef[key] ?? 0);
+        const afterVal  = Number(aft[key] ?? 0);
+        const added     = afterVal - beforeVal;
+
+        if (added > 0) {
+          const canReverse = Math.min(added, remaining, updatedAttrs[key] ?? 0);
+          if (canReverse > 0) {
+            updatedAttrs[key] = (updatedAttrs[key] ?? 0) - canReverse;
+            reversed.push({ attr: key, amount: canReverse });
+            remaining -= canReverse;
+          }
+          break;
+        }
+      }
+    }
+
+    if (remaining > 0) {
+      const recoverable = deficit - remaining;
+      throw new CharacterRuleError([
+        `Não foi possível remover **${takeAmount} PA** de **${character.name}**.`,
+        `PA livre: **${currentPA}** | Recuperável de distribuições: **${recoverable}** | Total disponível: **${currentPA + recoverable}**`
+      ]);
+    }
+
+    // Aplicar reversões e zerar PA livre
+    await Promise.all([
+      this.prisma.character.update({
+        where: { id: character.id },
+        data: { attributes: updatedAttrs as Prisma.InputJsonObject }
+      }),
+      this.prisma.characterProgress.update({
+        where: { id: progress.id },
+        data: { trainingPoints: 0 }
+      })
+    ]);
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id, actorId,
+      action: "character.pa.take",
+      targetType: "Character", targetId: character.id,
+      before: { trainingPoints: currentPA, attrs: currentAttrs },
+      after:  { trainingPoints: 0, attrs: updatedAttrs, reversed }
+    });
+
+    return { characterName: character.name, newPA: 0, reversed };
+  }
+
   public async getAvailablePA(guild: Guild, userId: string): Promise<number> {
     const character = await this.findActiveByUser(guild, userId);
     if (!character) return 0;
