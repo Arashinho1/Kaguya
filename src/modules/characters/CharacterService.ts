@@ -552,6 +552,74 @@ export class CharacterService {
     return bonusLines.length > 0 ? bonusLines.join("\n") : null;
   }
 
+  public async getAvailablePA(guild: Guild, userId: string): Promise<number> {
+    const character = await this.findActiveByUser(guild, userId);
+    if (!character) return 0;
+    const progress = await this.prisma.characterProgress.findUnique({
+      where: { characterId: character.id }
+    });
+    return progress?.trainingPoints ?? 0;
+  }
+
+  public async distributePA(
+    guild: Guild,
+    actorId: string,
+    attrKey: string,
+    amount: number
+  ): Promise<{ remainingPA: number }> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const character = await this.findActiveByUser(guild, actorId);
+
+    if (!character) {
+      throw new CharacterRuleError(["Você não tem uma ficha ativa neste servidor."]);
+    }
+
+    const progress = await this.prisma.characterProgress.findUnique({
+      where: { characterId: character.id }
+    });
+    const available = progress?.trainingPoints ?? 0;
+
+    if (amount <= 0) {
+      throw new CharacterRuleError(["A quantidade deve ser pelo menos 1."]);
+    }
+    if (amount > available) {
+      throw new CharacterRuleError([
+        `Você tem apenas **${available} PA** disponíveis.`
+      ]);
+    }
+
+    const currentAttrs = this.getAttributeValues(character);
+    const oldVal = currentAttrs[attrKey] ?? 0;
+    const newVal = oldVal + amount;
+
+    await Promise.all([
+      this.prisma.character.update({
+        where: { id: character.id },
+        data: { attributes: { ...currentAttrs, [attrKey]: newVal } as Prisma.InputJsonObject }
+      }),
+      progress
+        ? this.prisma.characterProgress.update({
+            where: { id: progress.id },
+            data: { trainingPoints: available - amount }
+          })
+        : this.prisma.characterProgress.create({
+            data: { guildId: rpgGuild.id, characterId: character.id, trainingPoints: 0 }
+          })
+    ]);
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "character.pa.distribute",
+      targetType: "Character",
+      targetId: character.id,
+      before: { [attrKey]: oldVal, pa: available },
+      after:  { [attrKey]: newVal, pa: available - amount }
+    });
+
+    return { remainingPA: available - amount };
+  }
+
   private async buildCharacterAttributes(
     guild: Guild,
     links: WorldLinks,

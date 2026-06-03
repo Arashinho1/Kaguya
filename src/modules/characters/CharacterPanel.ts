@@ -23,11 +23,19 @@ const CUSTOM_ID_PREFIX = "kaguya:characters";
 /** Atributos legados que foram removidos dos defaults mas podem existir em dados antigos */
 const LEGACY_ATTR_KEYS = new Set(["stamina", "inteligencia"]);
 
+/** Nomes de exibição dos atributos físicos distribuíveis */
+const PA_ATTR_NAMES: Record<string, string> = {
+  forca:       "Força",
+  velocidade:  "Velocidade",
+  resistencia: "Resistência"
+};
+
 export async function buildCharacterPanel(
   services: CommandServices,
   guild: Guild,
   viewer: User,
-  target: User
+  target: User,
+  mode: "normal" | "distribute" = "normal"
 ) {
   const character = await services.characters.findDisplayCharacter(guild, target);
 
@@ -74,22 +82,59 @@ export async function buildCharacterPanel(
     };
   }
 
-  // Botões de ação
-  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${CUSTOM_ID_PREFIX}:edit`)
-      .setLabel("Editar ficha")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
-      .setLabel("Recalcular atributos")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
-      .setLabel("Desativar ficha")
-      .setStyle(ButtonStyle.Danger)
-  );
-  const components = target.id === viewer.id ? [actionRow] : [];
+  // Buscar PA disponível
+  const availablePA = target.id === viewer.id
+    ? await services.characters.getAvailablePA(guild, target.id)
+    : 0;
+
+  // Botões conforme o modo
+  let components: ActionRowBuilder<ButtonBuilder>[] = [];
+  if (target.id === viewer.id) {
+    if (mode === "distribute") {
+      components = [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:home`)
+            .setLabel("← Voltar")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:add:forca`)
+            .setLabel("Força")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:add:velocidade`)
+            .setLabel("Velocidade")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:add:resistencia`)
+            .setLabel("Resistência")
+            .setStyle(ButtonStyle.Primary)
+        )
+      ];
+    } else {
+      components = [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:edit`)
+            .setLabel("Editar ficha")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:distribute`)
+            .setLabel(`Distribuir PA${availablePA > 0 ? ` (${availablePA})` : ""}`)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(availablePA === 0),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
+            .setLabel("Recalcular")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
+            .setLabel("Desativar ficha")
+            .setStyle(ButtonStyle.Danger)
+        )
+      ];
+    }
+  }
 
   // Tentar gerar card de imagem
   try {
@@ -106,6 +151,7 @@ export async function buildCharacterPanel(
       isActive:      character.isActive,
       imageUrl:      metadata.imageUrl       ?? undefined,
       ownerTag:      target.displayName,
+      availablePA,
       attributes:    attrDefs
         .filter(def => !LEGACY_ATTR_KEYS.has(def.key))
         .map(def => ({
@@ -283,6 +329,33 @@ async function handleCharacterButton(
     return;
   }
 
+  // ── Distribuição de PA ─────────────────────────────────────────────────────
+  if (action === "distribute") {
+    const panel = await buildCharacterPanel(services, interaction.guild, interaction.user, interaction.user, "distribute");
+    await interaction.update(panel);
+    return;
+  }
+
+  if (action === "home") {
+    const panel = await buildCharacterPanel(services, interaction.guild, interaction.user, interaction.user, "normal");
+    await interaction.update(panel);
+    return;
+  }
+
+  if (action.startsWith("add:")) {
+    const attrKey  = action.slice("add:".length);
+    const attrName = PA_ATTR_NAMES[attrKey] ?? attrKey;
+    const pa       = await services.characters.getAvailablePA(interaction.guild, interaction.user.id);
+
+    if (pa <= 0) {
+      await interaction.reply({ content: "Você não tem PA disponíveis.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.showModal(buildDistributeModal(attrKey, attrName, pa));
+    return;
+  }
+
   if (action === "deactivate") {
     await interaction.showModal(buildDeactivateCharacterModal());
     return;
@@ -316,6 +389,35 @@ async function handleCharacterModal(
   services: CommandServices
 ): Promise<void> {
   const action = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:modal:`.length);
+
+  // Modal de distribuição de PA
+  if (action.startsWith("add:")) {
+    const attrKey  = action.slice("add:".length);
+    const attrName = PA_ATTR_NAMES[attrKey] ?? attrKey;
+    const raw      = interaction.fields.getTextInputValue("amount").trim();
+    const amount   = parseInt(raw, 10);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await interaction.reply({ content: "Informe um número inteiro positivo.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const { remainingPA } = await services.characters.distributePA(
+      interaction.guild, interaction.user.id, attrKey, amount
+    );
+
+    // Atualizar o painel original
+    if (interaction.message) {
+      const panel = await buildCharacterPanel(services, interaction.guild, interaction.user, interaction.user, "distribute");
+      await interaction.message.edit(panel).catch(() => undefined);
+    }
+
+    await interaction.editReply(
+      `**${amount} PA** adicionados a **${attrName}**. PA restante: **${remainingPA}**`
+    );
+    return;
+  }
 
   if (!["create", "edit", "deactivate"].includes(action)) {
     await interaction.reply({
@@ -519,6 +621,24 @@ function buildEditCharacterModal(services: CommandServices, character: Character
         TextInputStyle.Short,
         false,
         villageRankValue
+      )
+    );
+}
+
+function buildDistributeModal(attrKey: string, attrName: string, availablePA: number): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${CUSTOM_ID_PREFIX}:modal:add:${attrKey}`)
+    .setTitle(`Distribuir PA — ${attrName}`)
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("amount")
+          .setLabel(`Quantidade (${availablePA} PA disponíveis)`)
+          .setPlaceholder(`1 até ${availablePA}`)
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(1)
+          .setMaxLength(4)
       )
     );
 }

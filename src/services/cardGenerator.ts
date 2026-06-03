@@ -27,6 +27,7 @@ export interface ProfileCardData {
   imageUrl?: string;
   attributes: AttributeEntry[];
   ownerTag: string;
+  availablePA?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -414,6 +415,19 @@ function drawContent(ctx: SKRSContext2D, data: ProfileCardData) {
     ctx.fillText(idItems[i].value.slice(0, 18), ix, y + 20);
   }
   y += 46;
+
+  // Badge de PA (Pontos de Atributo disponíveis)
+  if (data.availablePA !== undefined) {
+    const paLabel = `◆ ${data.availablePA} PA disponíveis`;
+    const paColor = data.availablePA > 0 ? '#F1C232' : '#5A5A88';
+    ctx.save();
+    if (data.availablePA > 0) { ctx.shadowColor = '#D4A017'; ctx.shadowBlur = 8; }
+    ctx.fillStyle = paColor;
+    ctx.font = FONT(12, '600');
+    ctx.fillText(paLabel, CX, y);
+    ctx.restore();
+    y += 20;
+  }
 
   drawGlowLine(ctx, CX, y, CW, '#2A2A4A');
   y += 18;
