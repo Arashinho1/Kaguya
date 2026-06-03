@@ -592,20 +592,27 @@ export class JutsuService {
   }
 
   public formatJutsu(jutsu: JutsuWithRelations): string {
-    const stats = [
-      `Tipo: **${jutsu.type?.name ?? "—"}**`,
-      jutsu.jutsuRank ? `Rank: **${jutsu.jutsuRank}**` : null,
-      jutsu.requiredRank ? `Ninja: **${jutsu.requiredRank.name}+**` : null,
-      `Chakra: **${jutsu.chakraCost}**`,
-      jutsu.duration ? `Duração: **${jutsu.duration}**` : null,
-      jutsu.usageLimit ? `Usos: **${jutsu.usageLimit}x**` : null
-    ].filter(Boolean).join(" | ");
+    // Linha de stats — formato compacto para caber no embed
+    const statParts = [
+      jutsu.jutsuRank          ? `**[${jutsu.jutsuRank}]**`                : null,
+      jutsu.type?.name         ? jutsu.type.name                           : "—",
+      `⚡ ${jutsu.chakraCost}`,
+      jutsu.requiredRank       ? `Ninja: ${jutsu.requiredRank.name}+`     : null,
+      jutsu.duration           ? jutsu.duration                            : null,
+      jutsu.usageLimit         ? `${jutsu.usageLimit}x`                   : null,
+    ].filter(Boolean);
+
+    // Descrição limitada a 90 chars para não explodir o embed
+    const rawDesc = jutsu.description ?? "";
+    const desc = rawDesc.length > 90
+      ? rawDesc.slice(0, 90) + "…"
+      : rawDesc;
 
     return [
       `**${jutsu.name}** \`${jutsu.key}\``,
-      stats,
-      jutsu.description ?? "Sem descrição."
-    ].join("\n");
+      statParts.join(" · "),
+      desc
+    ].filter(s => s.length > 0).join("\n");
   }
 
   private async findJutsuByIdentifier(

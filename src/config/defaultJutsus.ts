@@ -703,7 +703,144 @@ export const DEFAULT_JUTSU_DATA: DefaultJutsuEntry[] = [
   { key: "shouton_meiro_no_jutsu",   name: "Shouton: Meiro no Jutsu",       typeKey: "shouton", jutsuRank: "B", chakraCost: 80, description: "Labirinto de Cristal — cria labirinto de cristais ao redor do campo de batalha, desorientando e aprisionando o oponente." },
   { key: "shouton_suishou_kajuu",    name: "Shouton: Suishō Kajū",          typeKey: "shouton", jutsuRank: "A", chakraCost: 100, duration: "1 rodada", usageLimit: 1, description: "Árvore de Cristal gigante que cresce rapidamente aprisionando o alvo nos galhos e cristalizando-o." },
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // SHICHI TEN KOHOU — Sete Ativações (sistema de treino de Guy/Lee)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "shichi_daiichi_kassei",    name: "Daiichi Kassei",                typeKey: "shichi_ten_kohou", jutsuRank: "D", chakraCost: 35, duration: "3 rodadas", description: "Primeira Ativação — olhos brancos, aura amarela. +20 em todos atributos e +100 de chakra." },
+  { key: "shichi_daini_kassei",      name: "Daini Kassei",                  typeKey: "shichi_ten_kohou", jutsuRank: "C", chakraCost: 50, duration: "3 rodadas", description: "Segunda Ativação — músculos se expandem. +30 em todos atributos e +200 de chakra." },
+  { key: "shichi_daisan_kassei",     name: "Daisan Kassei",                 typeKey: "shichi_ten_kohou", jutsuRank: "B", chakraCost: 65, duration: "3 rodadas", description: "Terceira Ativação — pele avermelhada. +40 em todos atributos, +300 chakra e mobilidade aérea." },
+  { key: "shichi_daiyon_kassei",     name: "Daiyon Kassei",                 typeKey: "shichi_ten_kohou", jutsuRank: "B", chakraCost: 80, duration: "3 rodadas", description: "Quarta Ativação — força e velocidade máximas. +50 em todos atributos e +400 chakra." },
+  { key: "shichi_daigo_kassei",      name: "Daigo Kassei",                  typeKey: "shichi_ten_kohou", jutsuRank: "A", chakraCost: 95, duration: "3 rodadas", description: "Quinta Ativação — libera Asa Kujaku (Pavão Matinal). +100 em todos atributos e +500 chakra." },
+  { key: "shichi_dairoku_kassei",    name: "Dairoku Kassei",                typeKey: "shichi_ten_kohou", jutsuRank: "S", chakraCost: 350, duration: "3 rodadas", description: "Sexta Ativação — suor luminoso verde. +200 em todos atributos, +600 chakra. Libera Hirudora (Tigre do Dia)." },
+  { key: "shichi_daishichi_kassei",  name: "Daishichi Kassei",              typeKey: "shichi_ten_kohou", jutsuRank: "S", chakraCost: 450, duration: "3 rodadas", usageLimit: 1, description: "Sétima Ativação — aura de vapor amarelo de sangue. +350 em todos atributos, +700 chakra, quebra defesas absolutas. O usuário morre após 3 rodadas." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // MEITON — Liberação das Trevas (Hiruko — Filme)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "meiton_base",              name: "Meiton",                        typeKey: "meiton", jutsuRank: "C", chakraCost: 0, description: "Liberação das Trevas — Kekkei Genkai de Hiruko (Filme A Vontade de Fogo). A mão esquerda absorve chakra e anula jutsus de rank igual; a direita libera como vórtice destrutivo." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TAITON — Liberação de Tufão  [PARCIALMENTE CANÔNICO — RPG]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "taiton_base",              name: "Taiton",                        typeKey: "taiton", jutsuRank: "C", chakraCost: 20, description: "Liberação de Tufão — Kekkei Genkai avançada de vento: gera ciclones e tornados capazes de mover entidades como o Susano'o completo." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // KUCHIYOSE — Gatos / Nekomata  [CANÔNICO — Anime]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kuchiyose_nekomata",       name: "Kuchiyose: Nekomata",           typeKey: "kuchiyose_gatos", jutsuRank: "B", chakraCost: 50, description: "Invoca Nekomata, a grande gata-fantasma de dois rabo. Aparece no anime de Naruto." },
+  { key: "neko_no_gen",              name: "Neko no Gen",                   typeKey: "kuchiyose_gatos", jutsuRank: "C", chakraCost: 0, duration: "1 rodada", usageLimit: 1, description: "Genjutsu do gato — múltiplos gatos atacam o oponente em ilusão que causa dano real. Técnica de Nekomata." },
+  { key: "neko_capa",                name: "Arte Ninja: Capa de Gato",      typeKey: "kuchiyose_gatos", jutsuRank: "C", chakraCost: 50, usageLimit: 1, description: "O usuário é envolto em chakra felino, ganhando características de gato (garras, reflexos, cauda). Permite escolher espécie felina e seus atributos." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // KUCHIYOSE — Tartaruga (Mensageira)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kuchiyose_messenjaa_kame", name: "Kuchiyose: Messenjaa Kame",     typeKey: "kuchiyose_tartarugas", jutsuRank: "D", chakraCost: 10, description: "Invoca a tartaruga-mensageira: viaja longas distâncias e sinaliza socorro queimando a palavra 'S.O.S.' para alertar aliados. Aparece na 4ª Grande Guerra." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // JUJUTSU — Técnicas de Maldição (Hidan e Kakuzu)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "jujutsu_shiji_hyouketsu",  name: "Jujutsu: Shiji Hyōketsu",      typeKey: "jujutsu", jutsuRank: "A", chakraCost: 50, description: "Ritual de maldição — liga o usuário à vítima pela ingestão de sangue; qualquer dano sofrido pelo usuário espelha no alvo. Técnica baseada nas maldições de Hidan." },
+  { key: "jujutsu_mugen_shiki",      name: "Jujutsu: Mugen Shiki",          typeKey: "jujutsu", jutsuRank: "S", chakraCost: 0, description: "Corpo imortal via ritual de maldição — o usuário sobrevive a traumas físicos extremos, mas membros decepados não regeneram. Exige um sacrifício por uso." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // KUJAKU — Método Misterioso do Pavão  [CANÔNICO — Anime]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kujaku_cura",              name: "Método do Pavão: Cura",         typeKey: "kujaku", jutsuRank: "C", chakraCost: 50, description: "Concentra chakra roxo na palma para curar o alvo instantaneamente sem radiação. Técnica de Shizune/discípulos de Tsunade." },
+  { key: "kujaku_base",              name: "Método Misterioso do Pavão",    typeKey: "kujaku", jutsuRank: "B", chakraCost: 75, description: "Gera aura de chakra roxo em forma de penas de pavão manipuláveis em ataques, cordas, asas ou manifestações de bestas. Técnica do anime Naruto." },
+  { key: "kujaku_hipnose",           name: "Método do Pavão: Hipnose",      typeKey: "kujaku", jutsuRank: "A", chakraCost: 150, usageLimit: 1, description: "Cria esfera de energia rosa incandescente que submete o alvo à hipnose quando visto. Requer que o alvo esteja imobilizado." },
+  { key: "kujaku_absorcao",          name: "Método do Pavão: Absorção",     typeKey: "kujaku", jutsuRank: "S", chakraCost: 500, usageLimit: 1, description: "A besta de chakra devora o chakra roxo do oponente para amplificar seu poder. Pode criar variante de duas cabeças afetando dois alvos." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ ORIGAMI — Técnicas de Papel (Konan)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "origami_base",             name: "Origami no Jutsu",              typeKey: "cla_origami", jutsuRank: "D", chakraCost: 30, description: "Transformação do corpo em papel — base de todas as técnicas do Clã Origami. Konan do Akatsuki usa esta habilidade." },
+  { key: "origami_kami_shuriken",    name: "Kami Shuriken",                 typeKey: "cla_origami", jutsuRank: "D", chakraCost: 10, duration: "1 rodada", description: "Cria shurikens de papel com efeitos reais. Até 100 por uso." },
+  { key: "origami_kami_bunshin",     name: "Kami Bunshin",                  typeKey: "cla_origami", jutsuRank: "D", chakraCost: 10, description: "Clones de papel que podem usar todas as técnicas de papel. Até 15 clones simultâneos." },
+  { key: "origami_kami_kawarimi",    name: "Kami Kawarimi no Jutsu",        typeKey: "cla_origami", jutsuRank: "D", chakraCost: 10, duration: "1 rodada", usageLimit: 3, description: "Se desfaz em pedaços de papel para escapar de ataques e reaparecer em outro ponto." },
+  { key: "origami_kami_no_tate",     name: "Kami no Tate",                  typeKey: "cla_origami", jutsuRank: "C", chakraCost: 20, duration: "1 rodada", usageLimit: 3, description: "Barreira de papel — defesa absoluta. Técnica de Konan." },
+  { key: "origami_shikigami_no_mai", name: "Shikigami no Mai",              typeKey: "cla_origami", jutsuRank: "B", chakraCost: 50, description: "Dança do Papel — o usuário se transforma em fragmentos de papel, +50 dano. A técnica icônica de Konan." },
+  { key: "origami_kami_no_tsubasa",  name: "Kami no Tsubasa",               typeKey: "cla_origami", jutsuRank: "B", chakraCost: 50, duration: "3 rodadas", usageLimit: 2, description: "Asas de papel — permite voo e dá +50 dano às técnicas do clã. Konan usa para voar." },
+  { key: "origami_shikigami_arashi", name: "Shikigami no Mai: Arashi",      typeKey: "cla_origami", jutsuRank: "B", chakraCost: 70, duration: "1 rodada", description: "Dança do Papel: Tempestade — tornado gigante de pétalas de papel. Técnica de Konan." },
+  { key: "origami_kibaku_kami",      name: "Kibaku Kami",                   typeKey: "cla_origami", jutsuRank: "S", chakraCost: 300, duration: "1 rodada", usageLimit: 1, description: "Papel Explosivo — centenas de bilhões de papéis explosivos marcados detonam em sequência. Técnica S-class de Konan usada contra Obito." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ IBURI — Técnicas de Fumaça  [CANÔNICO — Arco ANBU de Kakashi]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "iburi_kemuri",             name: "Kemuri no Jutsu",               typeKey: "cla_iburi", jutsuRank: "D", chakraCost: 30, description: "Corpo de Fumaça — o usuário pode transformar partes ou todo o corpo em fumaça. Kekkei Genkai do Clã Iburi, aparece no arco ANBU de Kakashi." },
+  { key: "iburi_maengan",            name: "Maengan",                       typeKey: "cla_iburi", jutsuRank: "D", chakraCost: 20, duration: "1 rodada", description: "Lança múltiplas esferas de fumaça negra no oponente." },
+  { key: "iburi_kemuri_bunshin",     name: "Kemuri Bunshin",                typeKey: "cla_iburi", jutsuRank: "D", chakraCost: 10, description: "Clones de fumaça que explodem quando atingidos." },
+  { key: "iburi_enmakugire",         name: "Enmakugire",                    typeKey: "cla_iburi", jutsuRank: "C", chakraCost: 20, duration: "3 rodadas", usageLimit: 1, description: "Prisão de Fumaça — cria um prisma de fumaça onde o usuário pode desaparecer." },
+  { key: "iburi_enryuu",             name: "Enryuu",                        typeKey: "cla_iburi", jutsuRank: "B", chakraCost: 60, duration: "1 rodada", description: "Dragão de Fumaça — cria um poderoso dragão de fumaça para atacar." },
+  { key: "iburi_kemuri_henge",       name: "Kemuri ni Henkan",              typeKey: "cla_iburi", jutsuRank: "A", chakraCost: 100, duration: "1 rodada", usageLimit: 1, description: "Transformação em Fumaça — o usuário se torna intangível e imune a ataques físicos. A técnica limite do Clã Iburi." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ KURAMA — Genjutsu Extremo  [CANÔNICO — Filler Naruto]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kurama_gen_estilo",        name: "Gen: Kurama Sutairu",           typeKey: "cla_kurama", jutsuRank: "C", chakraCost: 30, description: "Estilo Genjutsu Kurama — amplifica a aptidão para ilusões e manipula a percepção da realidade. Base do Clã Kurama (Yakumo)." },
+  { key: "kurama_an_no_gen",         name: "An no Genjutsu",                typeKey: "cla_kurama", jutsuRank: "B", chakraCost: 50, duration: "1 rodada", usageLimit: 1, description: "Aprisiona o oponente numa vagem ilusória; causa cegueira e imobilização. Técnica do Clã Kurama." },
+  { key: "kurama_ta_an_no_gen",      name: "Ta An no Genjutsu",             typeKey: "cla_kurama", jutsuRank: "B", chakraCost: 50, duration: "1 rodada", usageLimit: 1, description: "Múltiplas vagens ilusórias aprisionam o oponente simultaneamente." },
+  { key: "kurama_dai_moku",          name: "Kurama Magen: Dai Moku",        typeKey: "cla_kurama", jutsuRank: "A", chakraCost: 100, duration: "3 rodadas", usageLimit: 1, description: "Aprisiona o oponente em floresta ilusória; o usuário pode se mover pelas árvores livremente." },
+  { key: "kurama_idou_no_kaibutsu",  name: "Idou no Kaibutsu",              typeKey: "cla_kurama", jutsuRank: "S", chakraCost: 500, duration: "3 rodadas", usageLimit: 1, description: "Manifesta uma criatura ilusória que distorce a realidade — a técnica proibida do Clã Kurama que distorce toda a percepção do campo de batalha." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ SOMA NO KO — Técnicas Siamesas (Sakon e Ukon)  [CANÔNICO]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "soma_no_ko_despertar",     name: "Ninpou: Despertar do Gêmeo Siamês", typeKey: "cla_soma_no_ko", jutsuRank: "C", chakraCost: 30, description: "Desperta o irmão gêmeo siamês — o segundo corpo emerge do primeiro, aumentando força, agilidade e resistência. Técnica de Sakon e Ukon (Sound 4)." },
+  { key: "soma_no_ko_libertacao",    name: "Ninpou: Libertação do Gêmeo Siamês", typeKey: "cla_soma_no_ko", jutsuRank: "B", chakraCost: 70, description: "Libera o irmão completamente — permite 4 jutsus por turno. Forma de combate plena de Sakon/Ukon." },
+  { key: "soma_no_ko_tarenken",      name: "Tarenken",                      typeKey: "cla_soma_no_ko", jutsuRank: "C", chakraCost: 30, duration: "1 rodada", usageLimit: 2, description: "Múltiplos Punhos Conectados — golpe triplo de dano devastador pelos dois corpos." },
+  { key: "soma_no_ko_tarensenpuu",   name: "Tarensenpū",                    typeKey: "cla_soma_no_ko", jutsuRank: "C", chakraCost: 30, duration: "1 rodada", usageLimit: 1, description: "Múltiplos Redemoinhos Conectados — rotação em espiral dos dois corpos criando defesa absoluta." },
+  { key: "soma_no_ko_kisei_kikai",   name: "Kisei Kikai no Jutsu",          typeKey: "cla_soma_no_ko", jutsuRank: "S", chakraCost: 300, duration: "2 rodadas", usageLimit: 1, description: "Fusão Parasitária — os dois corpos se fundem no oponente; 1ª rodada drena metade do HP/Chakra, 2ª rodada é fatal. Técnica proibida de Sakon/Ukon." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ KAZAMA — Manipulação de Chakra  [RPG — Pedido do servidor]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kazama_karasugan",         name: "Karasugan",                     typeKey: "cla_kazama", jutsuRank: "D", chakraCost: 10, description: "Dojutsu do Clã Kazama — detecta e absorve chakra corrupto do oponente." },
+  { key: "kazama_manipulacao_1",     name: "Manipulação de Chakra Kazama — Nível 1", typeKey: "cla_kazama", jutsuRank: "D", chakraCost: 5, duration: "3 rodadas", usageLimit: 1, description: "Materializa pequenos objetos de chakra para uso em combate." },
+  { key: "kazama_barreira",          name: "Barreira Kazama",               typeKey: "cla_kazama", jutsuRank: "C", chakraCost: 25, usageLimit: 1, description: "Barreira de chakra denso que bloqueia ataques físicos e elementais." },
+  { key: "kazama_manipulacao_2",     name: "Manipulação de Chakra Kazama — Nível 2", typeKey: "cla_kazama", jutsuRank: "C", chakraCost: 15, duration: "3 rodadas", usageLimit: 1, description: "Cria objetos de complexidade moderada a partir de chakra concentrado." },
+  { key: "kazama_manipulacao_3",     name: "Manipulação de Chakra Kazama — Nível 3", typeKey: "cla_kazama", jutsuRank: "A", chakraCost: 35, duration: "3 rodadas", usageLimit: 1, description: "Materializa construções complexas e armas de chakra puro de alto poder destrutivo." },
+  { key: "kazama_esferas_destruicao", name: "Esferas de Destruição Kazama", typeKey: "cla_kazama", jutsuRank: "S", chakraCost: 200, duration: "2 rodadas", usageLimit: 2, description: "Esferas de chakra puro que escalam em poder conforme o chakra investido. Técnica máxima do Clã Kazama." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ SARUTOBI — Domínio dos Cinco Elementos  [CANÔNICO]
+  // Techniques scattered across elements; clan bonus: all 5 natures + half chakra cost on elementals
+  // Sarutobi members: Hiruzen (3rd Hokage), Asuma, Konohamaru — techniques already in other categories
+  // Adding clan-exclusive entries based on canonical knowledge
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "sarutobi_cinco_elementos", name: "Cinco Elementos: Domínio Total", typeKey: "cla_sarutobi", jutsuRank: "A", chakraCost: 0, description: "Habilidade inata do Clã Sarutobi: domínio de todas as cinco naturezas de chakra simultaneamente. Hiruzen Sarutobi, o Terceiro Hokage, era chamado de 'Deus dos Shinobi' por esta habilidade." },
+  { key: "sarutobi_saru_no_ken",     name: "Saru no Ken",                   typeKey: "cla_sarutobi", jutsuRank: "C", chakraCost: 40, duration: "1 rodada", description: "Estilo de Combate do Macaco — técnica de taijutsu dos Sarutobi que imita os movimentos ágeis e imprevisíveis dos macacos. Usada em conjunto com Enma." },
+  { key: "sarutobi_katon_goryu",     name: "Katon: Gouka Mekkyaku — Sarutobi", typeKey: "cla_sarutobi", jutsuRank: "S", chakraCost: 300, duration: "1 rodada", usageLimit: 1, description: "Grande Aniquilação — versão do Clã Sarutobi da técnica de fogo suprema. Hiruzen usou contra Orochimaru durante o Ataque a Konoha." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ OTENKI — Manipulação do Clima  [RPG — Pedido do servidor]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "otenki_base",              name: "Manipulação do Tempo",          typeKey: "cla_otenki", jutsuRank: "D", chakraCost: 20, description: "Kekkei Genkai do Clã Otenki: controla o clima ao redor conforme a emoção do usuário — chuva, neve ou relâmpago independentemente do tempo real." },
+  { key: "otenki_chuva",             name: "Otenki: Chuva",                 typeKey: "cla_otenki", jutsuRank: "C", chakraCost: 20, duration: "1 rodada", usageLimit: 1, description: "Chuva que drena 40% do chakra do oponente e causa efeito de melancolia." },
+  { key: "otenki_neve",              name: "Otenki: Neve",                  typeKey: "cla_otenki", jutsuRank: "C", chakraCost: 20, duration: "1 rodada", usageLimit: 1, description: "Nevasca que pode congelar e imobilizar o alvo." },
+  { key: "otenki_trovao",            name: "Otenki: Trovão",                typeKey: "cla_otenki", jutsuRank: "B", chakraCost: 20, duration: "1 rodada", description: "Relâmpago roxo de rastreamento automático. Capacidade de incapacitação instantânea." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CLÃ KAMIZURUI — Técnicas de Abelhas  [SEMI-CANÔNICO — Anime]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "kamizurui_hachi",          name: "Kuchiyose: Hachi",              typeKey: "cla_kamizurui", jutsuRank: "D", chakraCost: 50, description: "Invoca abelhas controláveis para ataque e defesa. Técnica básica do Clã Kamizurui." },
+  { key: "kamizurui_hachimitsu_bunshin", name: "Kuchiyose: Hachimitsu no Bunshin", typeKey: "cla_kamizurui", jutsuRank: "D", chakraCost: 25, duration: "1 rodada", description: "Clones de mel que se dissolvem em mel grudento quando destruídos, prendendo o oponente." },
+  { key: "kamizurui_hachimitsu",     name: "Hachimitsu no Jutsu",           typeKey: "cla_kamizurui", jutsuRank: "C", chakraCost: 35, duration: "1 rodada", usageLimit: 3, description: "Abelhas que imobilizam via cobertura de mel pegajoso." },
+  { key: "kamizurui_subako",         name: "Subako (Colmeia)",              typeKey: "cla_kamizurui", jutsuRank: "C", chakraCost: 30, duration: "1 rodada", usageLimit: 2, description: "Colmeia de pedra contendo larvas que drenam chakra do oponente." },
+  { key: "kamizurui_hachi_senbon",   name: "Hachi Senbon no Jutsu",         typeKey: "cla_kamizurui", jutsuRank: "B", chakraCost: 50, duration: "1 rodada", usageLimit: 1, description: "Mil Ferrões — chuva de ferrões de abelha que causa dano e reduz a resistência do oponente por 3 rodadas." },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // JIBAKUJUTSU — Técnicas de Kanji Escrito  [RPG — Pedido do servidor]
+  // ═══════════════════════════════════════════════════════════════════════
+  { key: "jibaku_base",              name: "Jibakujutsu",                   typeKey: "cla_jibakujutsu", jutsuRank: "D", chakraCost: 20, description: "Técnica base — escreve kanji no ar com chakra para manifestar o significado literal do caractere." },
+  { key: "jibaku_iwa",               name: "Jibakujutsu: Iwa (岩 — Pedra)", typeKey: "cla_jibakujutsu", jutsuRank: "D", chakraCost: 20, duration: "1 rodada", usageLimit: 1, description: "Kanji Pedra — imobiliza alvos ou dispersa clones." },
+  { key: "jibaku_hi",                name: "Jibakujutsu: Hi (火 — Fogo)",   typeKey: "cla_jibakujutsu", jutsuRank: "D", chakraCost: 20, duration: "1 rodada", description: "Kanji Fogo — produz chamas de tamanho variável." },
+  { key: "jibaku_baku",              name: "Jibakujutsu: Baku (爆 — Explosão)", typeKey: "cla_jibakujutsu", jutsuRank: "C", chakraCost: 40, duration: "1 rodada", description: "Kanji Explosão — múltiplas explosões simultâneas." },
+  { key: "jibaku_en",                name: "Jibakujutsu: En (炎 — Chamas)", typeKey: "cla_jibakujutsu", jutsuRank: "C", chakraCost: 20, duration: "1 rodada", usageLimit: 1, description: "Kanji Chamas — muro de fogo como defesa absoluta." },
+  { key: "jibaku_zan",               name: "Jibakujutsu: Zan (斬 — Corte)", typeKey: "cla_jibakujutsu", jutsuRank: "C", chakraCost: 40, duration: "1 rodada", description: "Kanji Corte — cria lâminas de vento cortantes." },
+  { key: "jibaku_ayatsuru",          name: "Jibakujutsu: Ayatsuru (操 — Controlar)", typeKey: "cla_jibakujutsu", jutsuRank: "B", chakraCost: 50, duration: "1 rodada", usageLimit: 1, description: "Kanji Controlar — manipula as ações do oponente. Dispersível por reservas altas de chakra." },
+
 ];
+
 
 
 

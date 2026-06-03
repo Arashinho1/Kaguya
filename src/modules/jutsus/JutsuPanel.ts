@@ -943,19 +943,36 @@ function buildSearchModal(filterType: string, filterRank: string): ModalBuilder 
     );
 }
 
+/**
+ * Formata lista de jutsus respeitando o limite de 1024 chars do Discord.
+ * Nunca corta no meio de um jutsu — para em fronteiras seguras.
+ */
 function formatJutsuList(
   services: CommandServices,
   jutsus: JutsuWithRelations[],
   emptyText: string
 ): string {
-  if (jutsus.length === 0) {
-    return emptyText;
+  if (jutsus.length === 0) return emptyText;
+
+  const LIMIT = 980; // margem de segurança abaixo de 1024
+  const entries: string[] = [];
+  let total = 0;
+
+  for (const jutsu of jutsus) {
+    const entry = services.jutsus.formatJutsu(jutsu);
+    const sep   = entries.length > 0 ? "\n\n" : "";
+    const cost  = sep.length + entry.length;
+
+    // Se não cabe, para (mas garante ao menos uma entrada)
+    if (entries.length > 0 && total + cost > LIMIT) break;
+
+    entries.push(entry);
+    total += cost;
   }
 
-  const visible = jutsus.map((jutsu) => services.jutsus.formatJutsu(jutsu));
-  const suffix: string[] = [];
+  if (entries.length === 0) return emptyText;
 
-  return [...visible, ...suffix].join("\n\n").slice(0, 1024);
+  return entries.join("\n\n");
 }
 
 function parseTypeRankInfo(value: string): {
