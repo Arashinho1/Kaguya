@@ -5,16 +5,19 @@ import {
   EmbedBuilder,
   MessageFlags,
   ModalBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
   type Guild,
   type Interaction,
   type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
   type User
 } from "discord.js";
 
-import { JutsuRuleError, type ChakraAdjustMode, type JutsuWithRelations } from "./JutsuService.js";
+import { JutsuRuleError, type ChakraAdjustMode, type JutsuWithRelations, type LearnedJutsuWithRelations } from "./JutsuService.js";
 import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -52,7 +55,7 @@ export async function handleJutsuInteraction(
   interaction: Interaction,
   services: CommandServices
 ): Promise<boolean> {
-  if (!interaction.isButton() && !interaction.isModalSubmit()) {
+  if (!interaction.isButton() && !interaction.isModalSubmit() && !interaction.isStringSelectMenu()) {
     return false;
   }
 
@@ -71,6 +74,11 @@ export async function handleJutsuInteraction(
   }
 
   try {
+    if (interaction.isStringSelectMenu()) {
+      await handleJutsuSelect(interaction, services);
+      return true;
+    }
+
     if (interaction.isButton()) {
       await handleJutsuButton(interaction, services);
       return true;
@@ -115,36 +123,44 @@ async function buildJutsuEmbed(
   let totalPages = 1;
 
   if (page === "catalog") {
-    const jutsus = await services.jutsus.listJutsus(guild);
-    totalPages = Math.max(1, Math.ceil(jutsus.length / PAGE_SIZE));
-    const safePage = Math.min(pageNum, totalPages - 1);
-    const slice = jutsus.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-    const pageLabel = totalPages > 1 ? ` — p. ${safePage + 1}/${totalPages}` : "";
+    const safePage = Math.max(0, pageNum);
+    const { items, total } = await services.jutsus.listJutsusPaged(guild, {
+      skip: safePage * PAGE_SIZE,
+      take: PAGE_SIZE
+    });
+    totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const realPage = Math.min(safePage, totalPages - 1);
+    const pageLabel = totalPages > 1 ? ` — p. ${realPage + 1}/${totalPages}` : "";
     embed.addFields({
       name: `Catálogo ativo${pageLabel}`,
-      value: formatJutsuList(services, slice, "Nenhum jutsu ativo cadastrado.")
+      value: formatJutsuList(services, items, "Nenhum jutsu ativo cadastrado.")
     });
   } else if (page === "known") {
-    const known = await services.jutsus.listKnownJutsus(guild, user);
-    totalPages = Math.max(1, Math.ceil(known.length / PAGE_SIZE));
-    const safePage = Math.min(pageNum, totalPages - 1);
-    const slice = known.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-    const pageLabel = totalPages > 1 ? ` — p. ${safePage + 1}/${totalPages}` : "";
+    const safePage = Math.max(0, pageNum);
+    const { items, total } = await services.jutsus.listKnownJutsusPaged(guild, user, {
+      skip: safePage * PAGE_SIZE,
+      take: PAGE_SIZE
+    });
+    totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const realPage = Math.min(safePage, totalPages - 1);
+    const pageLabel = totalPages > 1 ? ` — p. ${realPage + 1}/${totalPages}` : "";
     embed.addFields({
       name: `Meus jutsus${pageLabel}`,
       value:
-        slice.length > 0
-          ? slice.map((e) => services.jutsus.formatJutsu(e.jutsu)).join("\n\n").slice(0, 1024)
+        items.length > 0
+          ? items.map((e) => services.jutsus.formatJutsu(e.jutsu)).join("\n\n").slice(0, 1024)
           : "Você ainda não aprendeu jutsus neste servidor."
     });
   } else {
-    embed.addFields(
-      {
-        name: "Jogador",
-        value: "**Catálogo** — veja os jutsus disponíveis\n**Meus jutsus** — seus jutsus aprendidos\n**Aprender** — aprenda um jutsu por nome ou chave\n**Usar** — execute um jutsu consumindo chakra",
-        inline: false
-      }
-    );
+    embed.addFields({
+      name: "Jogador",
+      value:
+        "**Catálogo** — veja os jutsus disponíveis\n" +
+        "**Meus jutsus** — seus jutsus aprendidos\n" +
+        "**Aprender** — selecione um jutsu do catálogo para aprender\n" +
+        "**Usar** — selecione um jutsu aprendido para executar",
+      inline: false
+    });
   }
 
   return { embed, totalPages };
@@ -159,6 +175,11 @@ function buildJutsuComponents(
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
 
   // Row 1 — navegação principal
+  // "Aprender" leva o pageNum no customId quando em catálogo, -1 quando fora
+  const learnId = page === "catalog"
+    ? `${CUSTOM_ID_PREFIX}:learn:${pageNum}`
+    : `${CUSTOM_ID_PREFIX}:learn:-1`;
+
   rows.push(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -170,7 +191,7 @@ function buildJutsuComponents(
         .setLabel("Meus jutsus")
         .setStyle(page === "known" ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:learn`)
+        .setCustomId(learnId)
         .setLabel("Aprender")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
@@ -263,12 +284,42 @@ async function handleJutsuButton(
   }
 
   if (action === "learn") {
-    await interaction.showModal(buildLearnJutsuModal());
+    if (pageNum >= 0) {
+      // Catálogo: mostra select menu com os jutsus da página atual
+      const { items } = await services.jutsus.listJutsusPaged(interaction.guild, {
+        skip: pageNum * PAGE_SIZE,
+        take: PAGE_SIZE
+      });
+      if (items.length === 0) {
+        await interaction.reply({ content: "Nenhum jutsu nesta página do catálogo.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.reply({
+        content: "Selecione o jutsu para aprender:",
+        components: [buildJutsuSelectMenu(items, `${CUSTOM_ID_PREFIX}:select:learn`)],
+        flags: MessageFlags.Ephemeral
+      });
+    } else {
+      // Fora do catálogo: modal de texto
+      await interaction.showModal(buildLearnJutsuModal());
+    }
     return;
   }
 
   if (action === "use") {
-    await interaction.showModal(buildUseJutsuModal());
+    const known = await services.jutsus.listKnownJutsus(interaction.guild, interaction.user);
+    if (known.length === 0) {
+      await interaction.reply({ content: "Você não tem jutsus aprendidos.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const slice = known.slice(0, 25);
+    await interaction.reply({
+      content: known.length > 25
+        ? `Selecione o jutsu para usar (${known.length} aprendidos, mostrando 25):`
+        : "Selecione o jutsu para usar:",
+      components: [buildJutsuSelectMenu(slice.map(e => e.jutsu), `${CUSTOM_ID_PREFIX}:select:use`)],
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
@@ -580,6 +631,60 @@ function textInputRow(
   );
 }
 
+function buildJutsuSelectMenu(
+  jutsus: JutsuWithRelations[],
+  customId: string
+): ActionRowBuilder<StringSelectMenuBuilder> {
+  const options = jutsus.map((j) => {
+    const rankLabel = j.jutsuRank ? ` [${j.jutsuRank}]` : "";
+    const typeLabel = j.type ? ` • ${j.type.name}` : "";
+    return new StringSelectMenuOptionBuilder()
+      .setValue(j.key)
+      .setLabel(`${j.name}${rankLabel}`.slice(0, 100))
+      .setDescription(`Chakra: ${j.chakraCost}${typeLabel}`.slice(0, 100));
+  });
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder("Escolha um jutsu...")
+      .addOptions(options)
+  );
+}
+
+async function handleJutsuSelect(
+  interaction: StringSelectMenuInteraction<"cached">,
+  services: CommandServices
+): Promise<void> {
+  const action = interaction.customId.slice(`${CUSTOM_ID_PREFIX}:select:`.length);
+  const selectedKey = interaction.values[0];
+
+  await interaction.deferUpdate();
+
+  if (action === "learn") {
+    const learned = await services.jutsus.learnJutsu(interaction.guild, interaction.user, selectedKey);
+    await interaction.editReply({
+      content: `**${learned.jutsu.name}** aprendido pela sua ficha ativa.`,
+      components: []
+    });
+    return;
+  }
+
+  if (action === "use") {
+    const result = await services.jutsus.useJutsu(interaction.guild, interaction.user, selectedKey);
+    await interaction.editReply({
+      content: [
+        `**${result.character.name}** usou **${result.jutsu.name}**.`,
+        `Chakra: **${result.chakraBefore}** → **${result.chakraAfter}/${result.chakraMax}**`
+      ].join("\n"),
+      components: []
+    });
+    return;
+  }
+
+  await interaction.editReply({ content: "Ação desconhecida.", components: [] });
+}
+
 async function canManageJutsus(
   interaction: ButtonInteraction<"cached"> | ModalSubmitInteraction<"cached">,
   services: CommandServices
@@ -818,7 +923,7 @@ function parseUserId(value: string): string | null {
 }
 
 async function replyPrivately(
-  interaction: ButtonInteraction | ModalSubmitInteraction,
+  interaction: ButtonInteraction | ModalSubmitInteraction | StringSelectMenuInteraction,
   content: string
 ): Promise<void> {
   if (interaction.deferred || interaction.replied) {

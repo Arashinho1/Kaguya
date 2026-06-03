@@ -156,6 +156,30 @@ export class JutsuService {
     });
   }
 
+  public async listJutsusPaged(
+    guild: Guild,
+    options: { skip?: number; take?: number; includeInactive?: boolean } = {}
+  ): Promise<{ items: JutsuWithRelations[]; total: number }> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const where = {
+      guildId: rpgGuild.id,
+      ...(options.includeInactive ? {} : { isActive: true })
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.jutsuDefinition.findMany({
+        where,
+        include: JUTSU_INCLUDE,
+        orderBy: [{ requiredRank: { sortOrder: "asc" } }, { name: "asc" }],
+        skip: options.skip ?? 0,
+        take: options.take
+      }),
+      this.prisma.jutsuDefinition.count({ where })
+    ]);
+
+    return { items, total };
+  }
+
   public async listKnownJutsus(guild: Guild, user: User): Promise<LearnedJutsuWithRelations[]> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
     const character = await this.characters.findActiveByUser(guild, user.id);
@@ -172,6 +196,34 @@ export class JutsuService {
       include: LEARNED_JUTSU_INCLUDE,
       orderBy: { learnedAt: "asc" }
     });
+  }
+
+  public async listKnownJutsusPaged(
+    guild: Guild,
+    user: User,
+    options: { skip?: number; take?: number } = {}
+  ): Promise<{ items: LearnedJutsuWithRelations[]; total: number }> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const character = await this.characters.findActiveByUser(guild, user.id);
+
+    if (!character) {
+      return { items: [], total: 0 };
+    }
+
+    const where = { guildId: rpgGuild.id, characterId: character.id };
+
+    const [items, total] = await Promise.all([
+      this.prisma.characterJutsu.findMany({
+        where,
+        include: LEARNED_JUTSU_INCLUDE,
+        orderBy: { learnedAt: "asc" },
+        skip: options.skip ?? 0,
+        take: options.take
+      }),
+      this.prisma.characterJutsu.count({ where })
+    ]);
+
+    return { items, total };
   }
 
   public async createJutsu(
