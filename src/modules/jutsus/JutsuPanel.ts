@@ -183,11 +183,11 @@ function buildJutsuComponents(
   rows.push(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:catalog:0`)
+        .setCustomId(`${CUSTOM_ID_PREFIX}:catalog`)
         .setLabel("Catálogo")
         .setStyle(page === "catalog" ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`${CUSTOM_ID_PREFIX}:known:0`)
+        .setCustomId(`${CUSTOM_ID_PREFIX}:known`)
         .setLabel("Meus jutsus")
         .setStyle(page === "known" ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
