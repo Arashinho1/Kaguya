@@ -243,6 +243,15 @@ export class GuildConfigService {
   ): Promise<{ created: number; skipped: number; repaired: number }> {
     const rpgGuild = await this.ensureGuild(guild);
 
+    // Garante que todos os tipos canônicos existem no banco ANTES de resolver typeIds
+    for (const typeData of DEFAULT_JUTSU_TYPES) {
+      await this.prisma.jutsuType.upsert({
+        where: { guildId_key: { guildId: rpgGuild.id, key: typeData.key } },
+        update:  { name: typeData.name },
+        create:  { guildId: rpgGuild.id, key: typeData.key, name: typeData.name }
+      });
+    }
+
     const [allTypes, existingJutsus] = await Promise.all([
       this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } }),
       this.prisma.jutsuDefinition.findMany({
