@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 
 import { CharacterRuleError, type CharacterWithRelations } from "./CharacterService.js";
+import { generateProfileCard } from "../../services/cardGenerator.js";
 import type { CommandServices } from "../../types/command.js";
 
 const CUSTOM_ID_PREFIX = "kaguya:characters";
@@ -70,28 +71,59 @@ export async function buildCharacterPanel(
     };
   }
 
-  return {
-    embeds: [renderCharacterEmbed(services, target, character)],
-    components:
-      target.id === viewer.id
-        ? [
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:edit`)
-                .setLabel("Editar ficha")
-                .setStyle(ButtonStyle.Primary),
-              new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
-                .setLabel("Recalcular atributos")
-                .setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
-                .setLabel("Desativar ficha")
-                .setStyle(ButtonStyle.Danger)
-            )
-          ]
-        : []
-  };
+  // Botões de ação
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${CUSTOM_ID_PREFIX}:edit`)
+      .setLabel("Editar ficha")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`${CUSTOM_ID_PREFIX}:refreshAttributes`)
+      .setLabel("Recalcular atributos")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`${CUSTOM_ID_PREFIX}:deactivate`)
+      .setLabel("Desativar ficha")
+      .setStyle(ButtonStyle.Danger)
+  );
+  const components = target.id === viewer.id ? [actionRow] : [];
+
+  // Tentar gerar card de imagem
+  try {
+    const attrDefs  = await services.attributes.listAttributes(guild);
+    const attrVals  = services.characters.getAttributeValues(character);
+    const metadata  = services.characters.getMetadata(character);
+
+    const cardBuffer = await generateProfileCard({
+      characterName: character.name,
+      concept:       metadata.concept ?? undefined,
+      villageName:   character.village?.name ?? undefined,
+      clanName:      character.clan?.name    ?? undefined,
+      rankName:      character.rank?.name    ?? undefined,
+      isActive:      character.isActive,
+      imageUrl:      metadata.imageUrl       ?? undefined,
+      ownerTag:      target.displayName,
+      attributes:    attrDefs.map(def => ({
+        key:      def.key,
+        name:     def.name,
+        value:    attrVals[def.key] ?? 0,
+        maxValue: def.maxValue ?? 200,
+        sortOrder: def.sortOrder
+      }))
+    });
+
+    return {
+      files: [{ attachment: cardBuffer, name: "perfil.png" }],
+      embeds: [],
+      components
+    };
+  } catch {
+    // Fallback: embed de texto caso canvas falhe
+    return {
+      embeds: [renderCharacterEmbed(services, target, character)],
+      components
+    };
+  }
 }
 
 export async function handleCharacterInteraction(
