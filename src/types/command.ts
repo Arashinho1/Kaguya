@@ -6,6 +6,7 @@ import type { CharacterService } from "../modules/characters/CharacterService.js
 import type { CombatService } from "../modules/combat/CombatService.js";
 import type { GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
 import type { JutsuService } from "../modules/jutsus/JutsuService.js";
+import type { PericiaService } from "../modules/pericias/PericiaService.js";
 import type { TrainingService } from "../modules/training/TrainingService.js";
 import type { WorldConfigService } from "../modules/world/WorldConfigService.js";
 
@@ -15,6 +16,7 @@ export interface CommandServices {
   combat: CombatService;
   guildConfig: GuildConfigService;
   jutsus: JutsuService;
+  pericias: PericiaService;
   training: TrainingService;
   world: WorldConfigService;
 }

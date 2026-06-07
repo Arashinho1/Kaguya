@@ -14,6 +14,7 @@ import {
 import { normalizeKey } from "../../utils/text.js";
 import type { CharacterService } from "../characters/CharacterService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
+import type { GrantPericiaXpResult, PericiaService } from "../pericias/PericiaService.js";
 
 const JUTSU_INCLUDE = {
   type: true,
@@ -80,6 +81,7 @@ export interface JutsuUseResult {
   chakraBefore: number;
   chakraAfter: number;
   chakraMax: number;
+  pericia: GrantPericiaXpResult | null;
 }
 
 export type ChakraAdjustMode = "set" | "add" | "full";
@@ -109,7 +111,8 @@ export class JutsuService {
   public constructor(
     private readonly prisma: PrismaClient,
     private readonly guildConfig: GuildConfigService,
-    private readonly characters: CharacterService
+    private readonly characters: CharacterService,
+    private readonly pericias: PericiaService
   ) {}
 
   public async getOverview(guild: Guild, user: User): Promise<JutsuOverview> {
@@ -507,6 +510,8 @@ export class JutsuService {
       }
     });
 
+    const periciaResult = await this.pericias.grantXpForJutsuUse(guild, character, jutsu, user.id);
+
     await this.writeAuditLog({
       guildId: rpgGuild.id,
       actorId: user.id,
@@ -519,7 +524,15 @@ export class JutsuService {
         chakraCost,
         chakraBefore: chakraState.current,
         chakraAfter,
-        chakraMax: chakraState.max
+        chakraMax: chakraState.max,
+        pericia: periciaResult
+          ? {
+              key: periciaResult.pericia.key,
+              xpGained: periciaResult.xpGained,
+              levelBefore: periciaResult.levelBefore,
+              levelAfter: periciaResult.levelAfter
+            }
+          : null
       }
     });
 
@@ -529,7 +542,8 @@ export class JutsuService {
       log,
       chakraBefore: chakraState.current,
       chakraAfter,
-      chakraMax: chakraState.max
+      chakraMax: chakraState.max,
+      pericia: periciaResult
     };
   }
 

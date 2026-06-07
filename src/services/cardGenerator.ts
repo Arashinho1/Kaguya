@@ -30,6 +30,21 @@ export interface ProfileCardData {
   availablePA?: number;
 }
 
+export interface PericiaEntry {
+  key: string;
+  name: string;
+  level: number;
+  xp: number;
+  maxXp: number;
+  sortOrder: number;
+}
+
+export interface PericiaCardData {
+  characterName: string;
+  ownerTag: string;
+  pericias: PericiaEntry[];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Paleta Naruto RPG
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,7 +64,7 @@ const C = {
   glow:     "#FF6B35",
 } as const;
 
-/** [dark, light, glow] por atributo */
+/** [dark, light, glow] por atributo/perícia */
 const ATTR: Record<string, [string, string, string]> = {
   chakra:             ["#154360", "#2E86C1", "#5DADE2"],
   forca:              ["#7B241C", "#E74C3C", "#FF6961"],
@@ -59,6 +74,18 @@ const ATTR: Record<string, [string, string, string]> = {
   ninjutsu_elemental: ["#943126", "#E67E22", "#F0A500"],
   taijutsu:           ["#7B241C", "#CD6155", "#F1948A"],
   genjutsu:           ["#0E6655", "#1ABC9C", "#48C9B0"],
+  // ─── Perícias adicionais (sem atributo equivalente) ───────────────────────
+  bukijutsu:          ["#6E2C00", "#CA6F1E", "#F5B041"],
+  kenjutsu:           ["#34495E", "#85929E", "#D6DBDF"],
+  fuinjutsu:          ["#4A235A", "#A569BD", "#D7BDE2"],
+  shurikenjutsu:      ["#5D6D7E", "#AEB6BF", "#EAEDED"],
+  juinjutsu:          ["#1B2631", "#5D6D7E", "#85929E"],
+  senjutsu:           ["#145A32", "#27AE60", "#82E0AA"],
+  iryo:               ["#0B5345", "#16A085", "#76D7C4"],
+  kuchiyose:          ["#784212", "#B9770E", "#F8C471"],
+  kanchi:             ["#1A5276", "#2980B9", "#85C1E9"],
+  barrier:            ["#7D6608", "#D4AC0D", "#F7DC6F"],
+  nintaijutsu:        ["#922B21", "#CB4335", "#F1948A"],
 };
 
 const ICON: Record<string, string> = {
@@ -70,13 +97,25 @@ const ICON: Record<string, string> = {
   ninjutsu_elemental: "✦",
   taijutsu:           "◆",
   genjutsu:           "◉",
+  // ─── Perícias adicionais (glifos restritos ao conjunto testado e renderizável) ──
+  bukijutsu:          "▲",
+  kenjutsu:           "▶",
+  fuinjutsu:          "◊",
+  shurikenjutsu:      "◁",
+  juinjutsu:          "▼",
+  senjutsu:           "Ω",
+  iryo:               "■",
+  kuchiyose:          "Δ",
+  kanchi:             "▽",
+  barrier:            "△",
+  nintaijutsu:        "◀",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dimensões
 // ─────────────────────────────────────────────────────────────────────────────
 
-const W = 820, H = 480;
+const W = 820, H = 512;
 const PW = 210;             // largura painel esquerdo (retrato)
 const CX = PW + 24;         // X do conteúdo
 const CW = W - CX - 14;    // largura do conteúdo
@@ -132,6 +171,22 @@ export async function generateProfileCard(data: ProfileCardData): Promise<Buffer
   drawPortraitOrnaments(ctx);
   drawStatusBadge(ctx, data.isActive);
   drawContent(ctx, data);
+  drawFooter(ctx, data.ownerTag);
+  drawVignette(ctx);
+
+  return canvas.toBuffer("image/png");
+}
+
+export async function generatePericiaCard(data: PericiaCardData): Promise<Buffer> {
+  await ensureFonts();
+
+  const canvas = createCanvas(W, H);
+  const ctx    = canvas.getContext("2d");
+
+  drawBackground(ctx);
+  drawSealPattern(ctx);
+  drawEnergyAccents(ctx);
+  drawPericiaContent(ctx, data);
   drawFooter(ctx, data.ownerTag);
   drawVignette(ctx);
 
@@ -530,6 +585,142 @@ function drawAttrBar(
     ctx.fill();
 
     // Reflexo no topo da barra
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#FFFFFF";
+    roundRect(ctx, x + 1, barY + 1, fw - 2, barH / 2 - 1, 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conteúdo — card de perícias
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PERICIA_MARGIN = 40;
+const PERICIA_COLS = 2;
+const PERICIA_ROWS = 7;
+const PERICIA_COL_GAP = 28;
+
+function drawPericiaContent(ctx: SKRSContext2D, data: PericiaCardData) {
+  const mx = PERICIA_MARGIN;
+  const cw = W - mx * 2;
+  let y = 46;
+
+  // Nome do personagem
+  ctx.save();
+  ctx.shadowColor = C.gold;
+  ctx.shadowBlur  = 14;
+  ctx.fillStyle   = C.goldL;
+  ctx.font        = FONT(30, 'bold');
+  ctx.fillText(data.characterName, mx, y);
+  ctx.restore();
+
+  // Subtítulo
+  ctx.fillStyle = C.muted;
+  ctx.font      = 'italic ' + FONT(13);
+  ctx.textAlign = 'right';
+  ctx.fillText('Catálogo de Perícias', mx + cw, y);
+  ctx.textAlign = 'left';
+
+  y += 18;
+  drawGlowLine(ctx, mx, y, cw, C.orange, 0.7);
+  y += 26;
+
+  drawSectionLabel(ctx, '▸ PROGRESSÃO POR USO — XP 0–100 · NÍVEL 1–5', mx, y);
+  y += 22;
+
+  const gridTop = y;
+  const gridBottom = H - FH - 14;
+  const rowH = (gridBottom - gridTop) / PERICIA_ROWS;
+  const colW = (cw - PERICIA_COL_GAP * (PERICIA_COLS - 1)) / PERICIA_COLS;
+
+  const sorted = [...data.pericias].sort((a, b) => a.sortOrder - b.sortOrder);
+  const maxEntries = PERICIA_COLS * PERICIA_ROWS;
+
+  for (let i = 0; i < sorted.length && i < maxEntries; i++) {
+    const col = i % PERICIA_COLS;
+    const row = Math.floor(i / PERICIA_COLS);
+    const x = mx + col * (colW + PERICIA_COL_GAP);
+    const cy = gridTop + row * rowH;
+    drawPericiaRow(ctx, x, cy, colW, sorted[i]);
+  }
+}
+
+function drawPericiaRow(ctx: SKRSContext2D, x: number, y: number, w: number, entry: PericiaEntry) {
+  const ratio = entry.maxXp > 0 ? Math.min(1, entry.xp / entry.maxXp) : 0;
+  const colors = ATTR[entry.key] ?? ["#444", "#888", "#aaa"];
+  const [dark, light, glow] = colors;
+  const icon = ICON[entry.key] ?? "·";
+
+  // Ícone
+  ctx.save();
+  ctx.fillStyle = light;
+  ctx.font = FONT(13);
+  ctx.fillText(icon, x, y + 13);
+  ctx.restore();
+
+  // Nome da perícia
+  ctx.fillStyle = C.text;
+  ctx.font = FONT(13, "600");
+  ctx.fillText(entry.name, x + 20, y + 13);
+
+  // Badge "Nv. X" (alinhado à direita)
+  const levelLabel = `Nv. ${entry.level}`;
+  ctx.font = FONT(11, "bold");
+  const badgeW = ctx.measureText(levelLabel).width + 18;
+  const badgeH = 17;
+  const badgeX = x + w - badgeW;
+  const badgeY = y;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(212,160,23,0.15)";
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 8);
+  ctx.fill();
+  ctx.strokeStyle = C.gold;
+  ctx.lineWidth = 1;
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 8);
+  ctx.stroke();
+  ctx.fillStyle = C.goldL;
+  ctx.textAlign = "center";
+  ctx.fillText(levelLabel, badgeX + badgeW / 2, badgeY + 12);
+  ctx.textAlign = "left";
+  ctx.restore();
+
+  // XP atual (entre o nome e o badge)
+  ctx.fillStyle = C.muted;
+  ctx.font = FONT(10);
+  ctx.textAlign = "right";
+  ctx.fillText(`${entry.xp}/${entry.maxXp} XP`, badgeX - 10, y + 12);
+  ctx.textAlign = "left";
+
+  // Barra de XP
+  const barY = y + 23;
+  const barH = 8;
+
+  ctx.fillStyle = C.dimbar;
+  roundRect(ctx, x, barY, w, barH, 3);
+  ctx.fill();
+
+  if (ratio > 0.005) {
+    const fw = w * ratio;
+
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = glow;
+    roundRect(ctx, x - 1, barY - 2, fw + 2, barH + 4, 4);
+    ctx.fill();
+    ctx.restore();
+
+    const grad = ctx.createLinearGradient(x, 0, x + fw, 0);
+    grad.addColorStop(0, dark);
+    grad.addColorStop(0.6, light);
+    grad.addColorStop(1, glow);
+    ctx.fillStyle = grad;
+    roundRect(ctx, x, barY, fw, barH, 3);
+    ctx.fill();
+
     ctx.save();
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = "#FFFFFF";

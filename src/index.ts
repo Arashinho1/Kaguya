@@ -9,6 +9,7 @@ import { CharacterService } from "./modules/characters/CharacterService.js";
 import { CombatService } from "./modules/combat/CombatService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import { JutsuService } from "./modules/jutsus/JutsuService.js";
+import { PericiaService } from "./modules/pericias/PericiaService.js";
 import { TrainingService } from "./modules/training/TrainingService.js";
 import { WorldConfigService } from "./modules/world/WorldConfigService.js";
 
@@ -26,7 +27,8 @@ const attributes = new AttributeService(prisma, guildConfig);
 const world = new WorldConfigService(prisma, guildConfig);
 const characters = new CharacterService(prisma, guildConfig, attributes);
 const training = new TrainingService(prisma, guildConfig, attributes, characters);
-const jutsus = new JutsuService(prisma, guildConfig, characters);
+const pericias = new PericiaService(prisma, guildConfig, characters);
+const jutsus = new JutsuService(prisma, guildConfig, characters, pericias);
 const combat = new CombatService(prisma, guildConfig, characters, jutsus);
 
 const services = {
@@ -35,6 +37,7 @@ const services = {
   characters,
   combat,
   jutsus,
+  pericias,
   training,
   world
 };

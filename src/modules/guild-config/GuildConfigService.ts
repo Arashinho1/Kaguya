@@ -6,6 +6,7 @@ import {
   DEFAULT_GUILD_SETTINGS,
   DEFAULT_JUTSU_TYPES,
   DEFAULT_MODULE_STATUS,
+  DEFAULT_PERICIAS,
   DEFAULT_PREFIX,
   DEFAULT_RANKS,
   DEFAULT_VILLAGES,
@@ -148,7 +149,34 @@ export class GuildConfigService {
       });
     }
 
+    for (const pericia of DEFAULT_PERICIAS) {
+      await this.prisma.periciaDefinition.upsert({
+        where: {
+          guildId_key: {
+            guildId: rpgGuild.id,
+            key: pericia.key
+          }
+        },
+        update: {
+          name: pericia.name,
+          sortOrder: pericia.sortOrder
+        },
+        create: {
+          guildId: rpgGuild.id,
+          key: pericia.key,
+          name: pericia.name,
+          sortOrder: pericia.sortOrder
+        }
+      });
+    }
+
+    // Resolve IDs de perícias antes de vincular os tipos de jutsu a elas
+    const allPericias = await this.prisma.periciaDefinition.findMany({ where: { guildId: rpgGuild.id } });
+    const periciaMap = new Map(allPericias.map((p) => [p.key, p.id]));
+
     for (const type of DEFAULT_JUTSU_TYPES) {
+      const periciaId = "periciaKey" in type ? periciaMap.get(type.periciaKey) ?? null : null;
+
       await this.prisma.jutsuType.upsert({
         where: {
           guildId_key: {
@@ -157,12 +185,14 @@ export class GuildConfigService {
           }
         },
         update: {
-          name: type.name
+          name: type.name,
+          periciaId
         },
         create: {
           guildId: rpgGuild.id,
           key: type.key,
-          name: type.name
+          name: type.name,
+          periciaId
         }
       });
     }
@@ -232,7 +262,8 @@ export class GuildConfigService {
         villages: DEFAULT_VILLAGES.length,
         clans: DEFAULT_CLANS.length,
         jutsuTypes: DEFAULT_JUTSU_TYPES.length,
-        jutsus: DEFAULT_JUTSU_DATA.length
+        jutsus: DEFAULT_JUTSU_DATA.length,
+        pericias: DEFAULT_PERICIAS.length
       }
     });
   }
@@ -243,12 +274,26 @@ export class GuildConfigService {
   ): Promise<{ created: number; skipped: number; repaired: number }> {
     const rpgGuild = await this.ensureGuild(guild);
 
+    // Garante que todas as perícias canônicas existem ANTES de resolver periciaIds dos tipos
+    for (const pericia of DEFAULT_PERICIAS) {
+      await this.prisma.periciaDefinition.upsert({
+        where: { guildId_key: { guildId: rpgGuild.id, key: pericia.key } },
+        update: { name: pericia.name, sortOrder: pericia.sortOrder },
+        create: { guildId: rpgGuild.id, key: pericia.key, name: pericia.name, sortOrder: pericia.sortOrder }
+      });
+    }
+
+    const allPericias = await this.prisma.periciaDefinition.findMany({ where: { guildId: rpgGuild.id } });
+    const periciaMap  = new Map(allPericias.map((p) => [p.key, p.id]));
+
     // Garante que todos os tipos canônicos existem no banco ANTES de resolver typeIds
     for (const typeData of DEFAULT_JUTSU_TYPES) {
+      const periciaId = "periciaKey" in typeData ? periciaMap.get(typeData.periciaKey) ?? null : null;
+
       await this.prisma.jutsuType.upsert({
         where: { guildId_key: { guildId: rpgGuild.id, key: typeData.key } },
-        update:  { name: typeData.name },
-        create:  { guildId: rpgGuild.id, key: typeData.key, name: typeData.name }
+        update:  { name: typeData.name, periciaId },
+        create:  { guildId: rpgGuild.id, key: typeData.key, name: typeData.name, periciaId }
       });
     }
 

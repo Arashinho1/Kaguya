@@ -17,7 +17,7 @@ import {
   type User
 } from "discord.js";
 
-import { JutsuRuleError, type ChakraAdjustMode, type JutsuWithRelations, type LearnedJutsuWithRelations } from "./JutsuService.js";
+import { JutsuRuleError, type ChakraAdjustMode, type JutsuUseResult, type JutsuWithRelations, type LearnedJutsuWithRelations } from "./JutsuService.js";
 import { hasConfiguredAdminRole, hasManageGuildPermission } from "../../services/permissions.js";
 import { sendStaffLogForGuild } from "../../services/staffLog.js";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -627,8 +627,9 @@ async function handleJutsuModal(
     await interaction.editReply(
       [
         `**${result.character.name}** usou **${result.jutsu.name}**.`,
-        `Chakra: **${result.chakraBefore}** → **${result.chakraAfter}/${result.chakraMax}**`
-      ].join("\n")
+        `Chakra: **${result.chakraBefore}** → **${result.chakraAfter}/${result.chakraMax}**`,
+        formatPericiaUseFeedback(result.pericia)
+      ].filter((line): line is string => Boolean(line)).join("\n")
     );
     return;
   }
@@ -929,8 +930,9 @@ async function handleJutsuSelect(
     await interaction.editReply({
       content: [
         `**${result.character.name}** usou **${result.jutsu.name}**.`,
-        `Chakra: **${result.chakraBefore}** → **${result.chakraAfter}/${result.chakraMax}**`
-      ].join("\n"),
+        `Chakra: **${result.chakraBefore}** → **${result.chakraAfter}/${result.chakraMax}**`,
+        formatPericiaUseFeedback(result.pericia)
+      ].filter((line): line is string => Boolean(line)).join("\n"),
       components: []
     });
     return;
@@ -996,6 +998,17 @@ function buildSearchModal(filterType: string, filterRank: string): ModalBuilder 
  * Formata lista de jutsus respeitando o limite de 1024 chars do Discord.
  * Nunca corta no meio de um jutsu — para em fronteiras seguras.
  */
+function formatPericiaUseFeedback(pericia: JutsuUseResult["pericia"]): string | null {
+  if (!pericia) return null;
+
+  const levelChanged = pericia.levelAfter !== pericia.levelBefore;
+  const levelInfo = levelChanged
+    ? ` (Nv. ${pericia.levelBefore} → **Nv. ${pericia.levelAfter}**! 🎉)`
+    : ` (Nv. ${pericia.levelAfter})`;
+
+  return `Perícia **${pericia.pericia.name}**: +${pericia.xpGained} XP${levelInfo}`;
+}
+
 function formatJutsuList(
   services: CommandServices,
   jutsus: JutsuWithRelations[],

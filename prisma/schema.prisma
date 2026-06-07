@@ -32,23 +32,26 @@ model RpgGuild {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  settings         GuildSetting[]
-  permissions      GuildRolePermission[]
-  auditLogs        AuditLog[]
-  attributes       AttributeDefinition[]
-  clans            Clan[]
-  villages         Village[]
-  ranks            RankDefinition[]
-  jutsuTypes       JutsuType[]
-  jutsus           JutsuDefinition[]
-  characters       Character[]
-  learnedJutsus    CharacterJutsu[]
-  characterProgress CharacterProgress[]
-  trainingLogs     TrainingLog[]
-  jutsuUseLogs     JutsuUseLog[]
-  combatEncounters CombatEncounter[]
+  settings           GuildSetting[]
+  permissions        GuildRolePermission[]
+  auditLogs          AuditLog[]
+  attributes         AttributeDefinition[]
+  clans              Clan[]
+  villages           Village[]
+  ranks              RankDefinition[]
+  jutsuTypes         JutsuType[]
+  jutsus             JutsuDefinition[]
+  characters         Character[]
+  learnedJutsus      CharacterJutsu[]
+  characterProgress  CharacterProgress[]
+  trainingLogs       TrainingLog[]
+  jutsuUseLogs       JutsuUseLog[]
+  periciaDefinitions PericiaDefinition[]
+  characterPericias  CharacterPericia[]
+  periciaXpLogs      PericiaXpLog[]
+  combatEncounters   CombatEncounter[]
   combatParticipants CombatParticipant[]
-  combatActionLogs CombatActionLog[]
+  combatActionLogs   CombatActionLog[]
 
   @@map("rpg_guilds")
 }
@@ -158,8 +161,8 @@ model RankDefinition {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  characters Character[]
+  guild          RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  characters     Character[]
   requiredJutsus JutsuDefinition[]
 
   @@unique([guildId, key])
@@ -173,16 +176,19 @@ model JutsuType {
   key         String
   name        String
   description String?
+  periciaId   String?
   metadata    Json     @default("{}")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  jutsus JutsuDefinition[]
+  guild   RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  pericia PericiaDefinition? @relation(fields: [periciaId], references: [id], onDelete: SetNull)
+  jutsus  JutsuDefinition[]
 
   @@unique([guildId, key])
   @@index([guildId])
+  @@index([periciaId])
   @@map("jutsu_types")
 }
 
@@ -204,12 +210,13 @@ model JutsuDefinition {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  guild        RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  type         JutsuType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
-  requiredRank RankDefinition? @relation(fields: [requiredRankId], references: [id], onDelete: SetNull)
-  learnedBy    CharacterJutsu[]
-  useLogs      JutsuUseLog[]
+  guild            RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  type             JutsuType?        @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  requiredRank     RankDefinition?   @relation(fields: [requiredRankId], references: [id], onDelete: SetNull)
+  learnedBy        CharacterJutsu[]
+  useLogs          JutsuUseLog[]
   combatActionLogs CombatActionLog[]
+  periciaXpLogs    PericiaXpLog[]
 
   @@unique([guildId, key])
   @@index([guildId])
@@ -232,16 +239,18 @@ model Character {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  guild   RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  clan    Clan?           @relation(fields: [clanId], references: [id], onDelete: SetNull)
-  village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
-  rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
-  learnedJutsus CharacterJutsu[]
-  progress      CharacterProgress?
-  trainingLogs  TrainingLog[]
-  jutsuUseLogs  JutsuUseLog[]
+  guild              RpgGuild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  clan               Clan?               @relation(fields: [clanId], references: [id], onDelete: SetNull)
+  village            Village?            @relation(fields: [villageId], references: [id], onDelete: SetNull)
+  rank               RankDefinition?     @relation(fields: [rankId], references: [id], onDelete: SetNull)
+  learnedJutsus      CharacterJutsu[]
+  progress           CharacterProgress?
+  trainingLogs       TrainingLog[]
+  jutsuUseLogs       JutsuUseLog[]
   combatParticipants CombatParticipant[]
-  combatActionLogs CombatActionLog[]
+  combatActionLogs   CombatActionLog[]
+  periciaProgress    CharacterPericia[]
+  periciaXpLogs      PericiaXpLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -303,6 +312,75 @@ model JutsuUseLog {
   @@index([guildId, characterId, createdAt])
   @@index([guildId, jutsuId, createdAt])
   @@map("jutsu_use_logs")
+}
+
+model PericiaDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild      RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  jutsuTypes JutsuType[]
+  progress   CharacterPericia[]
+  xpLogs     PericiaXpLog[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("pericia_definitions")
+}
+
+model CharacterPericia {
+  id            String   @id @default(cuid())
+  guildId       String
+  characterId   String
+  periciaId     String
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  xpGainedToday Int      @default(0)
+  xpDayKey      String   @default("")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  guild     RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pericia   PericiaDefinition @relation(fields: [periciaId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, periciaId])
+  @@index([guildId, characterId])
+  @@map("character_pericias")
+}
+
+model PericiaXpLog {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  periciaId   String
+  jutsuId     String?
+  actorId     String
+  xpGained    Int      @default(0)
+  xpBefore    Int      @default(0)
+  xpAfter     Int      @default(0)
+  levelBefore Int      @default(1)
+  levelAfter  Int      @default(1)
+  reason      String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  guild     RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pericia   PericiaDefinition @relation(fields: [periciaId], references: [id], onDelete: Cascade)
+  jutsu     JutsuDefinition?  @relation(fields: [jutsuId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, characterId, createdAt])
+  @@map("pericia_xp_logs")
 }
 
 model CombatEncounter {
@@ -369,18 +447,18 @@ model CombatActionLog {
 }
 
 model TrainingLog {
-  id          String   @id @default(cuid())
-  guildId     String
-  characterId String
-  actorId     String
-  action      String
+  id           String   @id @default(cuid())
+  guildId      String
+  characterId  String
+  actorId      String
+  action       String
   attributeKey String?
-  amount      Int      @default(0)
-  cost        Int      @default(0)
-  before      Json?
-  after       Json?
-  reason      String?
-  createdAt   DateTime @default(now())
+  amount       Int      @default(0)
+  cost         Int      @default(0)
+  before       Json?
+  after        Json?
+  reason       String?
+  createdAt    DateTime @default(now())
 
   guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)

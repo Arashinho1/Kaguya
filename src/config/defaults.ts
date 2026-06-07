@@ -13,12 +13,20 @@ export const DEFAULT_TRAINING_CONFIG = {
   maxIncreasePerAction: 5
 } as const;
 
+export const DEFAULT_PERICIA_CONFIG = {
+  baseXpPerUse: 4,
+  rankMultipliers: { E: 0.5, D: 0.75, C: 1, B: 1.5, A: 2, S: 3 } as Record<string, number>,
+  dailyXpCap: 40,
+  postCapXpGain: 1
+} as const;
+
 export const DEFAULT_MODULE_STATUS = {
   characters: true,
   attributes: true,
   jutsus: true,
   training: true,
-  combat: true
+  combat: true,
+  pericias: true
 } as const;
 
 export type GuildModuleKey = keyof typeof DEFAULT_MODULE_STATUS;
@@ -47,6 +55,11 @@ export const DEFAULT_MODULES: Array<{
     key: "training",
     name: "Treino",
     description: "Pontos de evolução, custo de treino e progressão dos atributos da ficha."
+  },
+  {
+    key: "pericias",
+    name: "Perícias",
+    description: "XP e níveis de perícias ganhos ao usar jutsus das categorias correspondentes."
   },
   {
     key: "combat",
@@ -107,6 +120,14 @@ export const DEFAULT_GUILD_SETTINGS = [
     value: DEFAULT_TRAINING_CONFIG,
     valueType: "JSON",
     isPublic: false
+  },
+  {
+    key: "periciaConfig",
+    label: "Configuração de perícias",
+    description: "Define XP base, multiplicadores por rank de jutsu e cap diário de XP das perícias.",
+    value: DEFAULT_PERICIA_CONFIG,
+    valueType: "JSON",
+    isPublic: false
   }
 ] as const;
 
@@ -124,6 +145,27 @@ export const DEFAULT_ATTRIBUTES = [
   { key: "genjutsu",           name: "Genjutsu",            sortOrder: 70 }
 ] as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Perícias — progressão por uso de jutsus (XP 0-100 → níveis 1-5)
+// ─────────────────────────────────────────────────────────────────────────────
+export const DEFAULT_PERICIAS = [
+  { key: "taijutsu",           name: "Taijutsu",           sortOrder: 10 },
+  { key: "ninjutsu",           name: "Ninjutsu",           sortOrder: 20 },
+  { key: "ninjutsu_elemental", name: "Ninjutsu Elemental", sortOrder: 30 },
+  { key: "genjutsu",           name: "Genjutsu",           sortOrder: 40 },
+  { key: "bukijutsu",          name: "Bukijutsu",          sortOrder: 50 },
+  { key: "kenjutsu",           name: "Kenjutsu",           sortOrder: 60 },
+  { key: "fuinjutsu",          name: "Fuinjutsu",          sortOrder: 70 },
+  { key: "shurikenjutsu",      name: "Shurikenjutsu",      sortOrder: 80 },
+  { key: "juinjutsu",          name: "Juinjutsu",          sortOrder: 90 },
+  { key: "senjutsu",           name: "Senjutsu",           sortOrder: 100 },
+  { key: "iryo",               name: "Iryo",               sortOrder: 110 },
+  { key: "kuchiyose",          name: "Kuchiyose",          sortOrder: 120 },
+  { key: "kanchi",             name: "Kanchi",             sortOrder: 130 },
+  { key: "barrier",            name: "Barrier",            sortOrder: 140 },
+  { key: "nintaijutsu",        name: "Nintaijutsu",        sortOrder: 150 }
+] as const;
+
 export const DEFAULT_RANKS = [
   { key: "estudante",      name: "Estudante",      sortOrder: 10, description: "Estudante da Academia Ninja. Ainda não é um ninja oficial." },
   { key: "genin",          name: "Genin",           sortOrder: 20, description: "Ninja de campo iniciante. Realiza missões D e C com supervisão." },
@@ -133,77 +175,82 @@ export const DEFAULT_RANKS = [
   { key: "sannin",         name: "Sannin",          sortOrder: 60, description: "Lendário — poder equivalente a Kage. Extremamente raro." }
 ] as const;
 
+/**
+ * `periciaKey` define para qual perícia (DEFAULT_PERICIAS) o uso de um jutsu desse tipo
+ * concede XP. É só o ponto de partida — totalmente reconfigurável depois pelo painel
+ * admin de perícias, sem precisar editar código. Tipos sem `periciaKey` não geram XP.
+ */
 export const DEFAULT_JUTSU_TYPES = [
   // ─── Categorias base ───────────────────────────────────────────────────────
-  { key: "ninjutsu",           name: "Ninjutsu" },
-  { key: "taijutsu",           name: "Taijutsu" },
-  { key: "genjutsu",           name: "Genjutsu" },
-  { key: "kenjutsu",           name: "Kenjutsu" },
-  { key: "bukijutsu",          name: "Bukijutsu" },
-  { key: "fuinjutsu",          name: "Fuinjutsu" },
-  { key: "ijutsu",             name: "Ijutsu" },
-  { key: "iryo_ninjutsu",      name: "Iryo Ninjutsu" },
-  { key: "senjutsu",           name: "Senjutsu" },
+  { key: "ninjutsu",           name: "Ninjutsu",            periciaKey: "ninjutsu" },
+  { key: "taijutsu",           name: "Taijutsu",            periciaKey: "taijutsu" },
+  { key: "genjutsu",           name: "Genjutsu",            periciaKey: "genjutsu" },
+  { key: "kenjutsu",           name: "Kenjutsu",            periciaKey: "kenjutsu" },
+  { key: "bukijutsu",          name: "Bukijutsu",           periciaKey: "bukijutsu" },
+  { key: "fuinjutsu",          name: "Fuinjutsu",           periciaKey: "fuinjutsu" },
+  { key: "ijutsu",             name: "Ijutsu",              periciaKey: "iryo" },
+  { key: "iryo_ninjutsu",      name: "Iryo Ninjutsu",       periciaKey: "iryo" },
+  { key: "senjutsu",           name: "Senjutsu",            periciaKey: "senjutsu" },
   { key: "hiden",              name: "Hiden" },
-  { key: "jujutsu",            name: "Jujutsu" },
+  { key: "jujutsu",            name: "Jujutsu",             periciaKey: "juinjutsu" },
 
   // ─── Ninjutsu elementais ────────────────────────────────────────────────────
-  { key: "katon",              name: "Katon" },
-  { key: "suiton",             name: "Suiton" },
-  { key: "raiton",             name: "Raiton" },
-  { key: "doton",              name: "Doton" },
-  { key: "futon",              name: "Futon" },
+  { key: "katon",              name: "Katon",               periciaKey: "ninjutsu_elemental" },
+  { key: "suiton",             name: "Suiton",              periciaKey: "ninjutsu_elemental" },
+  { key: "raiton",             name: "Raiton",              periciaKey: "ninjutsu_elemental" },
+  { key: "doton",              name: "Doton",               periciaKey: "ninjutsu_elemental" },
+  { key: "futon",              name: "Futon",               periciaKey: "ninjutsu_elemental" },
 
   // ─── Kekkei Genkai e subtypes ───────────────────────────────────────────────
-  { key: "kekkei_genkai",      name: "Kekkei Genkai" },
-  { key: "hyouton",            name: "Hyouton" },
-  { key: "ranton",             name: "Ranton" },
-  { key: "youton",             name: "Youton" },
-  { key: "bakuton",            name: "Bakuton" },
-  { key: "futton",             name: "Futton" },
-  { key: "shakuton",           name: "Shakuton" },
-  { key: "shouton",            name: "Shouton" },
-  { key: "meiton",             name: "Meiton" },
-  { key: "kouton",             name: "Kouton" },
-  { key: "taiton",             name: "Taiton" },
-  { key: "jinton_poeira",      name: "Jinton (Poeira)" },
-  { key: "jinton_velocidade",  name: "Jinton (Velocidade)" },
-  { key: "jiryoku",            name: "Jiryoku" },
-  { key: "satetsu",            name: "Satetsu" },
-  { key: "sakin",              name: "Sakin" },
-  { key: "douka",              name: "Douka no Jutsu" },
+  { key: "kekkei_genkai",      name: "Kekkei Genkai",       periciaKey: "ninjutsu_elemental" },
+  { key: "hyouton",            name: "Hyouton",             periciaKey: "ninjutsu_elemental" },
+  { key: "ranton",             name: "Ranton",              periciaKey: "ninjutsu_elemental" },
+  { key: "youton",             name: "Youton",              periciaKey: "ninjutsu_elemental" },
+  { key: "bakuton",            name: "Bakuton",             periciaKey: "ninjutsu_elemental" },
+  { key: "futton",             name: "Futton",              periciaKey: "ninjutsu_elemental" },
+  { key: "shakuton",           name: "Shakuton",            periciaKey: "ninjutsu_elemental" },
+  { key: "shouton",            name: "Shouton",             periciaKey: "ninjutsu_elemental" },
+  { key: "meiton",             name: "Meiton",              periciaKey: "ninjutsu_elemental" },
+  { key: "kouton",             name: "Kouton",              periciaKey: "ninjutsu_elemental" },
+  { key: "taiton",             name: "Taiton",              periciaKey: "ninjutsu_elemental" },
+  { key: "jinton_poeira",      name: "Jinton (Poeira)",     periciaKey: "ninjutsu_elemental" },
+  { key: "jinton_velocidade",  name: "Jinton (Velocidade)", periciaKey: "ninjutsu_elemental" },
+  { key: "jiryoku",            name: "Jiryoku",             periciaKey: "ninjutsu_elemental" },
+  { key: "satetsu",            name: "Satetsu",             periciaKey: "ninjutsu_elemental" },
+  { key: "sakin",              name: "Sakin",               periciaKey: "ninjutsu_elemental" },
+  { key: "douka",              name: "Douka no Jutsu",      periciaKey: "ninjutsu_elemental" },
 
   // ─── Taijutsu especializações ───────────────────────────────────────────────
-  { key: "hachimon",           name: "Hachimon Tonkou" },
-  { key: "shichi_ten_kohou",   name: "Shichi Ten Kohou" },
+  { key: "hachimon",           name: "Hachimon Tonkou",     periciaKey: "taijutsu" },
+  { key: "shichi_ten_kohou",   name: "Shichi Ten Kohou",    periciaKey: "taijutsu" },
 
   // ─── Exclusivos / Dojutsu ────────────────────────────────────────────────────
-  { key: "mangekyougan",       name: "Mangekyougan" },
-  { key: "akagan",             name: "Akagan" },
-  { key: "rinnegan",           name: "Rinnegan" },
-  { key: "hiraishin",          name: "Hiraishin" },
-  { key: "jiongu",             name: "Jiongu" },
-  { key: "kujaku",             name: "Kujaku" },
+  { key: "mangekyougan",       name: "Mangekyougan",        periciaKey: "genjutsu" },
+  { key: "akagan",             name: "Akagan",              periciaKey: "genjutsu" },
+  { key: "rinnegan",           name: "Rinnegan",            periciaKey: "genjutsu" },
+  { key: "hiraishin",          name: "Hiraishin",           periciaKey: "fuinjutsu" },
+  { key: "jiongu",             name: "Jiongu",              periciaKey: "ninjutsu_elemental" },
+  { key: "kujaku",             name: "Kujaku",              periciaKey: "ninjutsu_elemental" },
 
   // ─── Kuchiyose (Invocações) ─────────────────────────────────────────────────
-  { key: "kuchiyose",                   name: "Kuchiyose" },
-  { key: "kuchiyose_sapos",             name: "Kuchiyose — Sapos" },
-  { key: "kuchiyose_cobras",            name: "Kuchiyose — Cobras" },
-  { key: "kuchiyose_lesmas",            name: "Kuchiyose — Lesmas" },
-  { key: "kuchiyose_caes",              name: "Kuchiyose — Cães" },
-  { key: "kuchiyose_aves",              name: "Kuchiyose — Aves" },
-  { key: "kuchiyose_macacos",           name: "Kuchiyose — Macacos" },
-  { key: "kuchiyose_gatos",             name: "Kuchiyose — Gatos" },
-  { key: "kuchiyose_aranhas",           name: "Kuchiyose — Aranhas" },
-  { key: "kuchiyose_elefantes",         name: "Kuchiyose — Elefantes" },
-  { key: "kuchiyose_doninhas",          name: "Kuchiyose — Doninhas" },
-  { key: "kuchiyose_tartarugas",        name: "Kuchiyose — Tartarugas" },
-  { key: "kuchiyose_rashoumon",         name: "Kuchiyose — Rashoumon" },
-  { key: "kuchiyose_animais_marinhos",  name: "Kuchiyose — Animais Marinhos" },
-  { key: "kuchiyose_shikon",            name: "Kuchiyose — Shikon" },
-  { key: "kuchiyose_rinnegan",          name: "Kuchiyose — Rinnegan" },
+  { key: "kuchiyose",                   name: "Kuchiyose",                  periciaKey: "kuchiyose" },
+  { key: "kuchiyose_sapos",             name: "Kuchiyose — Sapos",          periciaKey: "kuchiyose" },
+  { key: "kuchiyose_cobras",            name: "Kuchiyose — Cobras",         periciaKey: "kuchiyose" },
+  { key: "kuchiyose_lesmas",            name: "Kuchiyose — Lesmas",         periciaKey: "kuchiyose" },
+  { key: "kuchiyose_caes",              name: "Kuchiyose — Cães",           periciaKey: "kuchiyose" },
+  { key: "kuchiyose_aves",              name: "Kuchiyose — Aves",           periciaKey: "kuchiyose" },
+  { key: "kuchiyose_macacos",           name: "Kuchiyose — Macacos",        periciaKey: "kuchiyose" },
+  { key: "kuchiyose_gatos",             name: "Kuchiyose — Gatos",          periciaKey: "kuchiyose" },
+  { key: "kuchiyose_aranhas",           name: "Kuchiyose — Aranhas",        periciaKey: "kuchiyose" },
+  { key: "kuchiyose_elefantes",         name: "Kuchiyose — Elefantes",      periciaKey: "kuchiyose" },
+  { key: "kuchiyose_doninhas",          name: "Kuchiyose — Doninhas",       periciaKey: "kuchiyose" },
+  { key: "kuchiyose_tartarugas",        name: "Kuchiyose — Tartarugas",     periciaKey: "kuchiyose" },
+  { key: "kuchiyose_rashoumon",         name: "Kuchiyose — Rashoumon",      periciaKey: "kuchiyose" },
+  { key: "kuchiyose_animais_marinhos",  name: "Kuchiyose — Animais Marinhos", periciaKey: "kuchiyose" },
+  { key: "kuchiyose_shikon",            name: "Kuchiyose — Shikon",         periciaKey: "kuchiyose" },
+  { key: "kuchiyose_rinnegan",          name: "Kuchiyose — Rinnegan",       periciaKey: "kuchiyose" },
 
-  // ─── Técnicas de Clãs ────────────────────────────────────────────────────────
+  // ─── Técnicas de Clãs (sem perícia padrão — específico de cada mesa) ────────
   { key: "cla_uchiha",         name: "Clã Uchiha" },
   { key: "cla_senju",          name: "Clã Senju" },
   { key: "cla_uzumaki",        name: "Clã Uzumaki" },
@@ -222,9 +269,9 @@ export const DEFAULT_JUTSU_TYPES = [
   { key: "cla_origami",        name: "Clã Origami" },
   { key: "cla_otenki",         name: "Clã Otenki" },
   { key: "cla_kihai",          name: "Clã Kihai" },
-  { key: "cla_jibakujutsu",    name: "Jibakujutsu" },
+  { key: "cla_jibakujutsu",    name: "Jibakujutsu",         periciaKey: "ninjutsu_elemental" },
   { key: "cla_kugutsu",        name: "Kugutsu no Jutsu" },
-  { key: "cla_kibaku_nendo",   name: "Kibaku Nendo" },
+  { key: "cla_kibaku_nendo",   name: "Kibaku Nendo",        periciaKey: "ninjutsu_elemental" },
   { key: "cla_soma_no_ko",     name: "Soma no Ko" },
   { key: "cla_kazama",         name: "Clã Kazama" },
   { key: "cla_sarutobi",       name: "Clã Sarutobi" },

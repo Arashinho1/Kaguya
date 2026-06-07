@@ -9,6 +9,7 @@ import { characterCommand } from "./info/character.js";
 import { combatCommand } from "./info/combat.js";
 import { helpCommand } from "./info/help.js";
 import { jutsuCommand } from "./info/jutsu.js";
+import { periciaCommand } from "./info/pericia.js";
 import { pingCommand } from "./info/ping.js";
 import { trainingCommand } from "./info/training.js";
 import type { PrefixCommand } from "../types/command.js";
@@ -21,6 +22,7 @@ const commandList: PrefixCommand[] = [
   chakraCommand,
   combatCommand,
   jutsuCommand,
+  periciaCommand,
   trainingCommand,
   setupCommand,
   configCommand,
