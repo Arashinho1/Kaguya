@@ -23,6 +23,14 @@ export interface PericiaConfig {
   rankMultipliers: Record<string, number>;
   dailyXpCap: number;
   postCapXpGain: number;
+  rankXpRequired: Record<string, number>;
+}
+
+export function computeMaxXpPerLevel(config: PericiaConfig, rankKey: string | null | undefined): number {
+  if (!rankKey) return PERICIA_MAX_XP;
+  const total = config.rankXpRequired[rankKey];
+  if (!total || total <= 0) return PERICIA_MAX_XP;
+  return Math.max(1, Math.round(total / PERICIA_MAX_LEVEL));
 }
 
 export interface CreatePericiaInput {
@@ -61,6 +69,7 @@ export interface AdjustPericiaProgressResult {
   pericia: PericiaDefinition;
   progress: CharacterPericia;
   log: PericiaXpLog;
+  maxXpPerLevel: number;
 }
 
 export class PericiaRuleError extends Error {
@@ -274,6 +283,11 @@ export class PericiaService {
     const current = await this.getOrCreateProgress(rpgGuild.id, character.id, pericia.id);
     const todayKey = getDayKey();
 
+    const rank = character.rankId
+      ? await this.prisma.rankDefinition.findUnique({ where: { id: character.rankId } })
+      : null;
+    const maxXpPerLevel = computeMaxXpPerLevel(config, rank?.key ?? null);
+
     const xpGainedToday = current.xpDayKey === todayKey ? current.xpGainedToday : 0;
     const rankMultiplier = config.rankMultipliers[jutsu.jutsuRank ?? ""] ?? 1;
     const rawXpGain = Math.max(1, Math.round(config.baseXpPerUse * rankMultiplier));
@@ -285,7 +299,7 @@ export class PericiaService {
 
     const xpBefore = current.xp;
     const levelBefore = current.level;
-    const { xp: xpAfter, level: levelAfter } = applyPericiaXpGain(xpBefore, levelBefore, xpGained);
+    const { xp: xpAfter, level: levelAfter } = applyPericiaXpGain(xpBefore, levelBefore, xpGained, maxXpPerLevel);
 
     const progress = await this.prisma.characterPericia.update({
       where: { id: current.id },
@@ -351,6 +365,12 @@ export class PericiaService {
       throw new PericiaRuleError([`Não encontrei uma perícia com a chave \`${periciaKey}\`.`]);
     }
 
+    const config = await this.getPericiaConfig(guild);
+    const rank = character.rankId
+      ? await this.prisma.rankDefinition.findUnique({ where: { id: character.rankId } })
+      : null;
+    const maxXpPerLevel = computeMaxXpPerLevel(config, rank?.key ?? null);
+
     const current = await this.getOrCreateProgress(rpgGuild.id, character.id, pericia.id);
     const xpBefore = current.xp;
     const levelBefore = current.level;
@@ -360,11 +380,11 @@ export class PericiaService {
 
     if (typeof input.level === "number") {
       levelAfter = clamp(Math.trunc(input.level), PERICIA_MIN_LEVEL, PERICIA_MAX_LEVEL);
-      xpAfter = levelAfter >= PERICIA_MAX_LEVEL ? Math.min(xpBefore, PERICIA_MAX_XP) : xpBefore;
+      xpAfter = levelAfter >= PERICIA_MAX_LEVEL ? Math.min(xpBefore, maxXpPerLevel) : xpBefore;
     }
 
     if (typeof input.xpDelta === "number" && input.xpDelta !== 0) {
-      const applied = applyPericiaXpGain(xpAfter, levelAfter, Math.trunc(input.xpDelta));
+      const applied = applyPericiaXpGain(xpAfter, levelAfter, Math.trunc(input.xpDelta), maxXpPerLevel);
       xpAfter = applied.xp;
       levelAfter = applied.level;
     }
@@ -404,7 +424,7 @@ export class PericiaService {
       reason: input.reason
     });
 
-    return { character, pericia, progress, log };
+    return { character, pericia, progress, log, maxXpPerLevel };
   }
 
   private async getOrCreateProgress(
@@ -465,26 +485,23 @@ export class PericiaService {
   }
 }
 
-/**
- * Aplica ganho de XP com carry entre níveis (100 XP = +1 nível), travando em
- * nível 5 / 100 XP no topo da progressão.
- */
 export function applyPericiaXpGain(
   currentXp: number,
   currentLevel: number,
-  xpGain: number
+  xpGain: number,
+  maxXpPerLevel: number = PERICIA_MAX_XP
 ): { xp: number; level: number } {
   let xp = currentXp + xpGain;
   let level = currentLevel;
 
-  while (xp >= PERICIA_MAX_XP && level < PERICIA_MAX_LEVEL) {
-    xp -= PERICIA_MAX_XP;
+  while (xp >= maxXpPerLevel && level < PERICIA_MAX_LEVEL) {
+    xp -= maxXpPerLevel;
     level += 1;
   }
 
   if (level >= PERICIA_MAX_LEVEL) {
     level = PERICIA_MAX_LEVEL;
-    xp = Math.min(xp, PERICIA_MAX_XP);
+    xp = Math.min(xp, maxXpPerLevel);
   }
 
   return { xp: Math.max(0, xp), level: clamp(level, PERICIA_MIN_LEVEL, PERICIA_MAX_LEVEL) };
@@ -495,11 +512,16 @@ export function formatPericiaConfig(config: PericiaConfig): string {
     .map(([rank, multiplier]) => `${rank}=${multiplier}x`)
     .join(", ");
 
+  const rankXp = Object.entries(config.rankXpRequired)
+    .map(([rank, xp]) => `${rank}=${xp}`)
+    .join(", ");
+
   return [
     `XP base por uso: **${config.baseXpPerUse}**`,
     `Multiplicadores por rank: ${multipliers || "—"}`,
     `Cap diário de XP: **${config.dailyXpCap}**`,
-    `Ganho após o cap: **${config.postCapXpGain}**`
+    `Ganho após o cap: **${config.postCapXpGain}**`,
+    `XP total por patente: ${rankXp || "—"}`
   ].join("\n");
 }
 
@@ -524,7 +546,8 @@ function normalizePericiaConfig(value: unknown): PericiaConfig {
     baseXpPerUse,
     rankMultipliers: normalizeRankMultipliers(record.rankMultipliers),
     dailyXpCap,
-    postCapXpGain
+    postCapXpGain,
+    rankXpRequired: normalizeRankXpRequired(record.rankXpRequired)
   };
 }
 
@@ -539,6 +562,20 @@ function normalizeRankMultipliers(value: unknown): Record<string, number> {
   );
 
   return entries.length > 0 ? Object.fromEntries(entries) : { ...DEFAULT_PERICIA_CONFIG.rankMultipliers };
+}
+
+function normalizeRankXpRequired(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...DEFAULT_PERICIA_CONFIG.rankXpRequired };
+  }
+
+  const record = value as Record<string, unknown>;
+  const entries = Object.entries(record).filter(
+    (entry): entry is [string, number] =>
+      typeof entry[1] === "number" && Number.isFinite(entry[1]) && entry[1] > 0
+  );
+
+  return entries.length > 0 ? Object.fromEntries(entries) : { ...DEFAULT_PERICIA_CONFIG.rankXpRequired };
 }
 
 function normalizeNumber(value: unknown, fallback: number, min: number): number {

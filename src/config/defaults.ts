@@ -17,7 +17,15 @@ export const DEFAULT_PERICIA_CONFIG = {
   baseXpPerUse: 4,
   rankMultipliers: { E: 0.5, D: 0.75, C: 1, B: 1.5, A: 2, S: 3 } as Record<string, number>,
   dailyXpCap: 40,
-  postCapXpGain: 1
+  postCapXpGain: 1,
+  rankXpRequired: {
+    genin: 300,
+    chunin: 1500,
+    jonin_especial: 2000,
+    jonin: 3000,
+    sannin: 5000,
+    kage: 5000
+  } as Record<string, number>
 } as const;
 
 export const DEFAULT_MODULE_STATUS = {

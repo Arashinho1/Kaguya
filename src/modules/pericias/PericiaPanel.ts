@@ -28,6 +28,7 @@ import {
 import {
   PERICIA_MAX_XP,
   PericiaRuleError,
+  computeMaxXpPerLevel,
   formatPericiaConfig,
   type PericiaConfig
 } from "./PericiaService.js";
@@ -60,7 +61,11 @@ export async function buildPericiaPanel(
   }
 
   const components = buildComponents(canManage);
-  const progress = await services.pericias.listProgress(guild, character);
+  const [progress, periciaConfig] = await Promise.all([
+    services.pericias.listProgress(guild, character),
+    services.pericias.getPericiaConfig(guild)
+  ]);
+  const maxXpPerLevel = computeMaxXpPerLevel(periciaConfig, character.rank?.key ?? null);
 
   try {
     const cardBuffer = await generatePericiaCard({
@@ -71,7 +76,7 @@ export async function buildPericiaPanel(
         name: pericia.name,
         level: entry.level,
         xp: entry.xp,
-        maxXp: PERICIA_MAX_XP,
+        maxXp: maxXpPerLevel,
         sortOrder: pericia.sortOrder
       }))
     });
@@ -83,7 +88,7 @@ export async function buildPericiaPanel(
     };
   } catch {
     return {
-      embeds: [renderPericiaEmbed(target, character.name, progress)],
+      embeds: [renderPericiaEmbed(target, character.name, progress, maxXpPerLevel)],
       components
     };
   }
@@ -92,7 +97,8 @@ export async function buildPericiaPanel(
 function renderPericiaEmbed(
   target: User,
   characterName: string,
-  progress: Awaited<ReturnType<CommandServices["pericias"]["listProgress"]>>
+  progress: Awaited<ReturnType<CommandServices["pericias"]["listProgress"]>>,
+  maxXpPerLevel: number = PERICIA_MAX_XP
 ): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(0x805ad5)
@@ -103,7 +109,7 @@ function renderPericiaEmbed(
         : progress
             .map(
               ({ pericia, progress: entry }) =>
-                `**${pericia.name}** — Nv. ${entry.level} (${entry.xp}/${PERICIA_MAX_XP} XP)`
+                `**${pericia.name}** — Nv. ${entry.level} (${entry.xp}/${maxXpPerLevel} XP)`
             )
             .join("\n")
     )
@@ -241,6 +247,7 @@ async function handlePericiaModal(
     const caps = splitPipeArgs(interaction.fields.getTextInputValue("caps"));
     const dailyXpCap = parseInteger(caps[0]);
     const postCapXpGain = parseInteger(caps[1]);
+    const rankXpRequiredRaw = interaction.fields.getTextInputValue("rankXpRequired").trim();
 
     if (baseXpPerUse === null || dailyXpCap === null || postCapXpGain === null) {
       await interaction.editReply(
@@ -253,7 +260,16 @@ async function handlePericiaModal(
 
     if (!rankMultipliers) {
       await interaction.editReply(
-        "Informe os multiplicadores por rank no formato `E=0.5, D=0.75, C=1, B=1.5, A=2, S=3`."
+        "Informe os multiplicadores por rank no formato `E=0.5 | D=0.75 | C=1 | B=1.5 | A=2 | S=3`."
+      );
+      return;
+    }
+
+    const rankXpRequired = rankXpRequiredRaw ? parseRankXpRequired(splitPipeArgs(rankXpRequiredRaw)) : undefined;
+
+    if (rankXpRequiredRaw && !rankXpRequired) {
+      await interaction.editReply(
+        "Informe o XP por patente no formato `genin=300 | chunin=1500 | jonin=3000` com valores inteiros positivos."
       );
       return;
     }
@@ -262,7 +278,8 @@ async function handlePericiaModal(
       baseXpPerUse,
       rankMultipliers,
       dailyXpCap,
-      postCapXpGain
+      postCapXpGain,
+      ...(rankXpRequired ? { rankXpRequired } : {})
     });
 
     await sendStaffLogForGuild(interaction.guild, interaction.user, services, {
@@ -429,7 +446,7 @@ async function handlePericiaModal(
         ].filter((line): line is string => Boolean(line)).join("\n")
       });
       await interaction.editReply(
-        `Perícia **${result.pericia.name}** de **${result.character.name}** ajustada para **${result.progress.xp}/${PERICIA_MAX_XP} XP / Nv. ${result.progress.level}**.`
+        `Perícia **${result.pericia.name}** de **${result.character.name}** ajustada para **${result.progress.xp}/${result.maxXpPerLevel} XP / Nv. ${result.progress.level}**.`
       );
     } catch (error) {
       if (error instanceof PericiaRuleError) {
@@ -461,13 +478,13 @@ function buildPericiaConfigModal(config: PericiaConfig): ModalBuilder {
       ),
       textInputRow(
         "rankMultipliers",
-        "Multiplicadores por rank",
-        "E=0.5, D=0.75, C=1, B=1.5, A=2, S=3",
+        "Multiplicadores por rank (jutsu)",
+        "E=0.5 | D=0.75 | C=1 | B=1.5 | A=2 | S=3",
         TextInputStyle.Short,
         true,
         Object.entries(config.rankMultipliers)
           .map(([rank, multiplier]) => `${rank}=${multiplier}`)
-          .join(", ")
+          .join(" | ")
       ),
       textInputRow(
         "caps",
@@ -476,6 +493,16 @@ function buildPericiaConfigModal(config: PericiaConfig): ModalBuilder {
         TextInputStyle.Short,
         true,
         `${config.dailyXpCap} | ${config.postCapXpGain}`
+      ),
+      textInputRow(
+        "rankXpRequired",
+        "XP total por patente (chave=total)",
+        "genin=300 | chunin=1500 | jonin=3000",
+        TextInputStyle.Short,
+        false,
+        Object.entries(config.rankXpRequired)
+          .map(([rank, xp]) => `${rank}=${xp}`)
+          .join(" | ")
       )
     );
 }
@@ -578,6 +605,29 @@ function parseRankMultipliers(entries: string[]): Record<string, number> | null 
   }
 
   return multipliers;
+}
+
+function parseRankXpRequired(entries: string[]): Record<string, number> | null {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const result: Record<string, number> = {};
+
+  for (const entry of entries) {
+    const eqIdx = entry.indexOf("=");
+    if (eqIdx <= 0) return null;
+    const rank = entry.slice(0, eqIdx).trim().toLowerCase();
+    const xp = parseInteger(entry.slice(eqIdx + 1));
+
+    if (!rank || xp === null || xp <= 0) {
+      return null;
+    }
+
+    result[rank] = xp;
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 async function replyPrivately(
