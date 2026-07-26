@@ -3,9 +3,16 @@ import type { CommandServices } from "../types/command.js";
 import { attributeAdminCommand, attributesCommand } from "./attributes.js";
 import { characterCommand } from "./characters.js";
 import { setupCommand } from "./setup.js";
+import { worldCommand } from "./world.js";
 
 export const commandRegistry = new CommandRegistry<CommandServices>();
 
-for (const command of [setupCommand, attributesCommand, attributeAdminCommand, characterCommand]) {
+for (const command of [
+  setupCommand,
+  attributesCommand,
+  attributeAdminCommand,
+  characterCommand,
+  worldCommand
+]) {
   commandRegistry.register(command);
 }

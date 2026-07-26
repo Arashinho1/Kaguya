@@ -2,6 +2,7 @@ import { EmbedBuilder } from "discord.js";
 
 import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
 import { registerModule } from "../core/modules/registry.js";
+import type { LinkKind } from "../modules/characters/CharacterService.js";
 import type { CommandServices } from "../types/command.js";
 
 registerModule({
@@ -16,6 +17,13 @@ const verArgs = [
 
 const criarArgs = [
   { name: "nome", type: "text", description: "Nome do personagem." }
+] as const satisfies readonly ArgDef[];
+
+const LINK_KINDS = ["cla", "vila", "rank"] as const;
+
+const vincularArgs = [
+  { name: "tipo", type: "string", description: "cla, vila ou rank.", choices: LINK_KINDS },
+  { name: "nome", type: "text", description: "Nome (clã/vila) ou chave (rank)." }
 ] as const satisfies readonly ArgDef[];
 
 export const characterCommand = defineCommandGroup<CommandServices>({
@@ -49,10 +57,17 @@ export const characterCommand = defineCommandGroup<CommandServices>({
           .setTitle(view.character.name)
           .setDescription(
             view.attributes.length > 0
-              ? view.attributes.map((attr) => `**${attr.name}**: ${attr.value}`).join("\n")
+              ? view.attributes
+                  .map((attr) => `**${attr.name}**: ${attr.value}${attr.bonus !== 0 ? ` (${attr.baseValue} + ${attr.bonus})` : ""}`)
+                  .join("\n")
               : "Nenhum atributo configurado neste servidor ainda."
           )
-          .addFields({ name: "Chakra", value: String(view.chakra), inline: true });
+          .addFields(
+            { name: "Chakra", value: String(view.chakra), inline: true },
+            { name: "Clã", value: view.character.clan?.name ?? "—", inline: true },
+            { name: "Vila", value: view.character.village?.name ?? "—", inline: true },
+            { name: "Rank", value: view.character.rank?.name ?? "—", inline: true }
+          );
 
         await ctx.reply({ embeds: [embed] });
       }
@@ -65,6 +80,21 @@ export const characterCommand = defineCommandGroup<CommandServices>({
       async handler(ctx) {
         const created = await ctx.services.characters.createCharacter(ctx.guild, ctx.user.id, ctx.args.nome);
         await ctx.reply(`Ficha criada: **${created.name}**. Use \`.ficha\` para ver seus atributos.`);
+      }
+    }),
+
+    defineSubcommand<typeof vincularArgs, CommandServices>({
+      name: "vincular",
+      description: "Vincula sua ficha a um clã, vila ou rank cadastrado.",
+      args: vincularArgs,
+      async handler(ctx) {
+        const updated = await ctx.services.characters.linkCharacter(
+          ctx.guild,
+          ctx.user.id,
+          ctx.args.tipo as LinkKind,
+          ctx.args.nome
+        );
+        await ctx.reply(`Ficha **${updated.name}** atualizada.`);
       }
     })
   ]

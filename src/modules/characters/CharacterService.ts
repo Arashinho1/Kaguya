@@ -1,20 +1,43 @@
 import type { Guild } from "discord.js";
 
 import { DomainError } from "../../core/errors.js";
-import type { Character, PrismaClient } from "../../generated/prisma/client.js";
+import type { Clan, PrismaClient, RankDefinition, Village } from "../../generated/prisma/client.js";
 import type { AttributeService } from "../attributes/AttributeService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
+import { normalizeBonuses, type WorldConfigService } from "../world/WorldConfigService.js";
 
 export class CharacterRuleError extends DomainError {}
+
+export type LinkKind = "cla" | "vila" | "rank";
+
+const WORLD_INCLUDE = { clan: true, village: true, rank: true } as const;
+
+export interface CharacterWithWorld {
+  id: string;
+  guildId: string;
+  userId: string;
+  name: string;
+  clanId: string | null;
+  villageId: string | null;
+  rankId: string | null;
+  attributes: unknown;
+  metadata: unknown;
+  isActive: boolean;
+  clan: Clan | null;
+  village: Village | null;
+  rank: RankDefinition | null;
+}
 
 export interface CharacterAttributeView {
   key: string;
   name: string;
+  baseValue: number;
+  bonus: number;
   value: number;
 }
 
 export interface CharacterView {
-  character: Character;
+  character: CharacterWithWorld;
   attributes: CharacterAttributeView[];
   chakra: number;
 }
@@ -23,18 +46,20 @@ export class CharacterService {
   public constructor(
     private readonly prisma: PrismaClient,
     private readonly guildConfig: GuildConfigService,
-    private readonly attributes: AttributeService
+    private readonly attributes: AttributeService,
+    private readonly world: WorldConfigService
   ) {}
 
-  public async getActiveCharacter(guild: Guild, userId: string): Promise<Character | null> {
+  public async getActiveCharacter(guild: Guild, userId: string): Promise<CharacterWithWorld | null> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
 
     return this.prisma.character.findFirst({
-      where: { guildId: rpgGuild.id, userId, isActive: true }
+      where: { guildId: rpgGuild.id, userId, isActive: true },
+      include: WORLD_INCLUDE
     });
   }
 
-  public async createCharacter(guild: Guild, userId: string, name: string): Promise<Character> {
+  public async createCharacter(guild: Guild, userId: string, name: string): Promise<CharacterWithWorld> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
 
     const existingForUser = await this.getActiveCharacter(guild, userId);
@@ -55,12 +80,8 @@ export class CharacterService {
     const snapshot = Object.fromEntries(activeAttributes.map((attr) => [attr.key, attr.baseValue]));
 
     const created = await this.prisma.character.create({
-      data: {
-        guildId: rpgGuild.id,
-        userId,
-        name,
-        attributes: snapshot
-      }
+      data: { guildId: rpgGuild.id, userId, name, attributes: snapshot },
+      include: WORLD_INCLUDE
     });
 
     await this.guildConfig.writeAuditLog({
@@ -75,19 +96,74 @@ export class CharacterService {
     return created;
   }
 
-  public async getCharacterView(guild: Guild, character: Character): Promise<CharacterView> {
+  public async linkCharacter(guild: Guild, userId: string, kind: LinkKind, name: string): Promise<CharacterWithWorld> {
+    const character = await this.getActiveCharacter(guild, userId);
+    if (!character) {
+      throw new CharacterRuleError("Você ainda não tem uma ficha. Crie uma com `.ficha criar <nome>`.");
+    }
+
+    if (kind === "cla") {
+      const clan = await this.world.findClan(guild, name);
+      if (!clan || !clan.isActive) {
+        throw new CharacterRuleError(`Não encontrei o clã **${name}** (ou ele está desativado).`);
+      }
+      if (clan.memberLimit !== null && character.clanId !== clan.id) {
+        const count = await this.world.countActiveCharactersInClan(clan.id);
+        if (count >= clan.memberLimit) {
+          throw new CharacterRuleError(`O clã **${clan.name}** já atingiu o limite de ${clan.memberLimit} membros.`);
+        }
+      }
+      return this.updateLink(character.id, { clanId: clan.id });
+    }
+
+    if (kind === "vila") {
+      const village = await this.world.findVillage(guild, name);
+      if (!village || !village.isActive) {
+        throw new CharacterRuleError(`Não encontrei a vila **${name}** (ou ela está desativada).`);
+      }
+      return this.updateLink(character.id, { villageId: village.id });
+    }
+
+    const rank = await this.world.findRank(guild, name);
+    if (!rank || !rank.isActive) {
+      throw new CharacterRuleError(`Não encontrei o rank \`${name}\` (ou ele está desativado).`);
+    }
+    return this.updateLink(character.id, { rankId: rank.id });
+  }
+
+  private async updateLink(
+    characterId: string,
+    data: { clanId?: string; villageId?: string; rankId?: string }
+  ): Promise<CharacterWithWorld> {
+    return this.prisma.character.update({
+      where: { id: characterId },
+      data,
+      include: WORLD_INCLUDE
+    });
+  }
+
+  public async getCharacterView(guild: Guild, character: CharacterWithWorld): Promise<CharacterView> {
     const activeAttributes = await this.attributes.listAttributes(guild);
     const snapshot = isRecordOfNumbers(character.attributes) ? character.attributes : {};
 
+    const combinedBonuses: Record<string, number> = {};
+    for (const source of [character.clan?.bonuses, character.village?.bonuses, character.rank?.bonuses]) {
+      for (const [key, value] of Object.entries(normalizeBonuses(source))) {
+        combinedBonuses[key] = (combinedBonuses[key] ?? 0) + value;
+      }
+    }
+
     const attributeValues: Record<string, number> = {};
     const attributeViews: CharacterAttributeView[] = activeAttributes.map((attr) => {
-      const value = snapshot[attr.key] ?? attr.baseValue;
+      const baseValue = snapshot[attr.key] ?? attr.baseValue;
+      const bonus = combinedBonuses[attr.key] ?? 0;
+      const value = baseValue + bonus;
       attributeValues[attr.key] = value;
-      return { key: attr.key, name: attr.name, value };
+      return { key: attr.key, name: attr.name, baseValue, bonus, value };
     });
 
     const chakraFormula = await this.attributes.getChakraFormula(guild);
-    const chakra = this.attributes.calculateChakra(attributeValues, chakraFormula);
+    const chakra = this.attributes.calculateChakra(attributeValues, chakraFormula) + (combinedBonuses.chakra ?? 0);
 
     return { character, attributes: attributeViews, chakra };
   }
