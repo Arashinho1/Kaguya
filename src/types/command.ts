@@ -1,16 +1,14 @@
 import type { AttributeService } from "../modules/attributes/AttributeService.js";
 import type { CharacterService } from "../modules/characters/CharacterService.js";
 import type { CombatService } from "../modules/combat/CombatService.js";
+import type { EconomyService } from "../modules/economy/EconomyService.js";
 import type { GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
 import type { JutsuService } from "../modules/jutsus/JutsuService.js";
 import type { PericiaService } from "../modules/pericias/PericiaService.js";
 import type { TrainingService } from "../modules/training/TrainingService.js";
 import type { WorldConfigService } from "../modules/world/WorldConfigService.js";
 
-/**
- * Serviços injetados em todo comando. Cresce a cada módulo reconstruído
- * (economy) — ver plano de reconstrução.
- */
+/** Serviços injetados em todo comando — um por módulo do bot. */
 export interface CommandServices {
   guildConfig: GuildConfigService;
   attributes: AttributeService;
@@ -20,4 +18,5 @@ export interface CommandServices {
   pericias: PericiaService;
   jutsus: JutsuService;
   combat: CombatService;
+  economy: EconomyService;
 }

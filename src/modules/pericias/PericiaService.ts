@@ -8,6 +8,7 @@ import {
   type PrismaClient
 } from "../../generated/prisma/client.js";
 import type { CharacterWithWorld } from "../characters/CharacterService.js";
+import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 
 export class PericiaRuleError extends DomainError {}
@@ -41,7 +42,8 @@ export interface PericiaProgressView {
 export class PericiaService {
   public constructor(
     private readonly prisma: PrismaClient,
-    private readonly guildConfig: GuildConfigService
+    private readonly guildConfig: GuildConfigService,
+    private readonly economy: EconomyService
   ) {}
 
   public async listPericias(
@@ -257,6 +259,13 @@ export class PericiaService {
         reason
       }
     });
+
+    if (levelAfter > levelBefore) {
+      const reward = await this.economy.getPericiaLevelUpReward(guild);
+      if (reward > 0) {
+        await this.economy.grantCurrency(guild, actorId, character.id, reward, `Subiu de nível em ${pericia.name}`);
+      }
+    }
 
     return updated;
   }

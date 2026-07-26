@@ -9,6 +9,7 @@ import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
 import { CombatService } from "./modules/combat/CombatService.js";
+import { EconomyService } from "./modules/economy/EconomyService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import { JutsuService } from "./modules/jutsus/JutsuService.js";
 import { PericiaService } from "./modules/pericias/PericiaService.js";
@@ -24,11 +25,12 @@ const client = new Client({
 const guildConfig = new GuildConfigService(prisma);
 const attributes = new AttributeService(prisma, guildConfig);
 const world = new WorldConfigService(prisma, guildConfig);
-const characters = new CharacterService(prisma, guildConfig, attributes, world);
+const economy = new EconomyService(prisma, guildConfig);
+const characters = new CharacterService(prisma, guildConfig, attributes, world, economy);
 const training = new TrainingService(prisma, guildConfig, attributes, characters);
-const pericias = new PericiaService(prisma, guildConfig);
+const pericias = new PericiaService(prisma, guildConfig, economy);
 const jutsus = new JutsuService(prisma, guildConfig, characters, pericias);
-const combat = new CombatService(prisma, guildConfig);
+const combat = new CombatService(prisma, guildConfig, economy);
 
 const services: CommandServices = {
   guildConfig,
@@ -38,7 +40,8 @@ const services: CommandServices = {
   training,
   pericias,
   jutsus,
-  combat
+  combat,
+  economy
 };
 
 client.once(Events.ClientReady, (readyClient) => {

@@ -3,6 +3,7 @@ import type { Guild } from "discord.js";
 import { DomainError } from "../../core/errors.js";
 import type { Clan, PrismaClient, RankDefinition, Village } from "../../generated/prisma/client.js";
 import type { AttributeService } from "../attributes/AttributeService.js";
+import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 import { normalizeBonuses, type WorldConfigService } from "../world/WorldConfigService.js";
 
@@ -47,7 +48,8 @@ export class CharacterService {
     private readonly prisma: PrismaClient,
     private readonly guildConfig: GuildConfigService,
     private readonly attributes: AttributeService,
-    private readonly world: WorldConfigService
+    private readonly world: WorldConfigService,
+    private readonly economy: EconomyService
   ) {}
 
   public async getActiveCharacter(guild: Guild, userId: string): Promise<CharacterWithWorld | null> {
@@ -174,8 +176,10 @@ export class CharacterService {
     const activeAttributes = await this.attributes.listAttributes(guild);
     const snapshot = this.getBaseAttributeSnapshot(character);
 
+    const equippedBonuses = await this.economy.getEquippedBonuses(character.id);
+
     const combinedBonuses: Record<string, number> = {};
-    for (const source of [character.clan?.bonuses, character.village?.bonuses, character.rank?.bonuses]) {
+    for (const source of [character.clan?.bonuses, character.village?.bonuses, character.rank?.bonuses, equippedBonuses]) {
       for (const [key, value] of Object.entries(normalizeBonuses(source))) {
         combinedBonuses[key] = (combinedBonuses[key] ?? 0) + value;
       }

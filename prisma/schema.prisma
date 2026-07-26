@@ -44,6 +44,9 @@ model RpgGuild {
   learnedJutsus      CharacterJutsu[]
   jutsuUseLogs       JutsuUseLog[]
   duelEncounters     DuelEncounter[]
+  itemDefinitions    ItemDefinition[]
+  inventories        CharacterInventory[]
+  currencyLogs       CurrencyLog[]
 
   @@map("rpg_guilds")
 }
@@ -129,6 +132,8 @@ model Character {
   duelsAsChallenger DuelEncounter[] @relation("DuelChallenger")
   duelsAsOpponent   DuelEncounter[] @relation("DuelOpponent")
   duelsWon          DuelEncounter[] @relation("DuelWinner")
+  inventory         CharacterInventory[]
+  currencyLogs      CurrencyLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -141,6 +146,7 @@ model CharacterProgress {
   characterId    String   @unique
   trainingPoints Int      @default(0)
   currentChakra  Int?
+  currency       Int      @default(0)
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -403,6 +409,64 @@ model DuelEncounter {
 
   @@index([guildId, channelId, status])
   @@map("duel_encounters")
+}
+
+model ItemDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  price       Int?
+  bonuses     Json     @default("{}")
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild     RpgGuild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  inventory CharacterInventory[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("item_definitions")
+}
+
+model CharacterInventory {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  itemId      String
+  quantity    Int      @default(1)
+  equipped    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  item      ItemDefinition  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, itemId])
+  @@index([guildId, characterId])
+  @@map("character_inventories")
+}
+
+model CurrencyLog {
+  id             String   @id @default(cuid())
+  guildId        String
+  characterId    String
+  actorId        String
+  amount         Int
+  balanceBefore  Int
+  balanceAfter   Int
+  reason         String?
+  createdAt      DateTime @default(now())
+
+  guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@map("currency_logs")
 }
 
 model AuditLog {

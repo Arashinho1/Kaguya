@@ -3,6 +3,7 @@ import type { Guild } from "discord.js";
 import { DomainError } from "../../core/errors.js";
 import type { DuelEncounter, Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import type { CharacterWithWorld } from "../characters/CharacterService.js";
+import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 
 export class CombatRuleError extends DomainError {}
@@ -12,7 +13,8 @@ const ALLOWED_CHANNELS_KEY = "combatChannelIds";
 export class CombatService {
   public constructor(
     private readonly prisma: PrismaClient,
-    private readonly guildConfig: GuildConfigService
+    private readonly guildConfig: GuildConfigService,
+    private readonly economy: EconomyService
   ) {}
 
   // ─── Canais permitidos ───────────────────────────────────────────────────
@@ -189,6 +191,11 @@ export class CombatService {
       targetId: duel.id,
       after: { winnerCharacterId }
     });
+
+    const reward = await this.economy.getDuelWinReward(guild);
+    if (reward > 0) {
+      await this.economy.grantCurrency(guild, actorId, winnerCharacterId, reward, "Vitória em duelo");
+    }
 
     return updated;
   }
