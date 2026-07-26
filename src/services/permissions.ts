@@ -1,8 +1,8 @@
-import { Message, PermissionsBitField, type Guild } from "discord.js";
+import { PermissionsBitField, type Client, type Guild, type GuildMember } from "discord.js";
 
+import type { CommandAccess } from "../core/commands/index.js";
 import { env } from "../config/env.js";
 import { ADMIN_COMMAND_PERMISSION, type GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
-import type { CommandAccess } from "../types/command.js";
 
 export function hasManageGuildPermission(
   permissions: Readonly<PermissionsBitField> | null | undefined
@@ -14,13 +14,10 @@ export function hasManageGuildPermission(
   );
 }
 
-export function canManageGuild(message: Message<true>): boolean {
-  return hasManageGuildPermission(message.member?.permissions);
-}
-
 export async function canUseCommandAccess(
-  message: Message<true>,
   access: CommandAccess,
+  member: GuildMember | null,
+  client: Client,
   guildConfig: GuildConfigService
 ): Promise<boolean> {
   if (access === "member") {
@@ -28,23 +25,13 @@ export async function canUseCommandAccess(
   }
 
   if (access === "admin") {
-    return canManageGuild(message) || canUseConfiguredAdminRole(message, guildConfig);
+    if (hasManageGuildPermission(member?.permissions)) {
+      return true;
+    }
+    return member ? hasConfiguredAdminRole(member.guild, member.roles.cache.keys(), guildConfig) : false;
   }
 
-  return canUseOwnerCommand(message);
-}
-
-export async function canUseConfiguredAdminRole(
-  message: Message<true>,
-  guildConfig: GuildConfigService
-): Promise<boolean> {
-  const roleIds = message.member?.roles.cache.keys();
-
-  if (!roleIds) {
-    return false;
-  }
-
-  return hasConfiguredAdminRole(message.guild, roleIds, guildConfig);
+  return canUseOwnerCommand(member?.user.id ?? null, client);
 }
 
 export async function hasConfiguredAdminRole(
@@ -55,14 +42,16 @@ export async function hasConfiguredAdminRole(
   return guildConfig.hasAnyRolePermission(guild, roleIds, ADMIN_COMMAND_PERMISSION);
 }
 
-export async function canUseOwnerCommand(message: Message<true>): Promise<boolean> {
-  const configuredOwnerIds = parseOwnerIds(env.BOT_OWNER_IDS);
-
-  if (configuredOwnerIds.length > 0) {
-    return configuredOwnerIds.includes(message.author.id);
+export async function canUseOwnerCommand(userId: string | null, client: Client): Promise<boolean> {
+  if (!userId) {
+    return false;
   }
 
-  const application = await message.client.application?.fetch().catch(() => null);
+  if (env.BOT_OWNER_IDS.length > 0) {
+    return env.BOT_OWNER_IDS.includes(userId);
+  }
+
+  const application = await client.application?.fetch().catch(() => null);
   const owner = application?.owner;
 
   if (!owner) {
@@ -70,15 +59,8 @@ export async function canUseOwnerCommand(message: Message<true>): Promise<boolea
   }
 
   if ("members" in owner) {
-    return owner.members.has(message.author.id);
+    return owner.members.has(userId);
   }
 
-  return owner.id === message.author.id;
-}
-
-function parseOwnerIds(value: string): string[] {
-  return value
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => /^\d{15,25}$/.test(id));
+  return owner.id === userId;
 }

@@ -1,64 +1,64 @@
 import type { Interaction } from "discord.js";
 
-import { handleAttributeInteraction } from "../modules/attributes/AttributePanel.js";
-import { handleCharacterInteraction } from "../modules/characters/CharacterPanel.js";
-import { handleCombatInteraction } from "../modules/combat/CombatPanel.js";
-import { handleConfigInteraction } from "../modules/config-panel/ConfigPanel.js";
-import { handleHelpInteraction } from "../modules/help/HelpPanel.js";
-import { handleJutsuInteraction } from "../modules/jutsus/JutsuPanel.js";
-import { handlePericiaInteraction } from "../modules/pericias/PericiaPanel.js";
-import { handleTrainingInteraction } from "../modules/training/TrainingPanel.js";
+import { commandRegistry } from "../commands/index.js";
+import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
 export async function handleInteractionCreate(
   interaction: Interaction,
   services: CommandServices
 ): Promise<void> {
-  const handled = await handleAttributeInteraction(interaction, services);
-
-  if (handled) {
+  if (!interaction.isChatInputCommand() || !interaction.inCachedGuild()) {
     return;
   }
 
-  const characterHandled = await handleCharacterInteraction(interaction, services);
+  const command = commandRegistry.get(interaction.commandName);
 
-  if (characterHandled) {
+  if (!command) {
     return;
   }
 
-  const jutsuHandled = await handleJutsuInteraction(interaction, services);
+  const hasAccess = await canUseCommandAccess(
+    command.access,
+    interaction.member,
+    interaction.client,
+    services.guildConfig
+  );
 
-  if (jutsuHandled) {
+  if (!hasAccess) {
+    await interaction.reply({ content: getAccessDeniedMessage(command.access), ephemeral: true });
     return;
   }
 
-  const trainingHandled = await handleTrainingInteraction(interaction, services);
-
-  if (trainingHandled) {
+  if (command.module && !(await services.guildConfig.isModuleEnabled(interaction.guild, command.module))) {
+    await interaction.reply({
+      content: `O módulo **${command.module}** está desativado neste servidor.`,
+      ephemeral: true
+    });
     return;
   }
 
-  const periciaHandled = await handlePericiaInteraction(interaction, services);
+  try {
+    await command.executeFromInteraction(interaction, services);
+  } catch (error) {
+    console.error(`[command:${command.name}]`, error);
+    const payload = { content: "Não consegui executar esse comando. Verifique os logs do bot.", ephemeral: true };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(payload);
+    } else {
+      await interaction.reply(payload);
+    }
+  }
+}
 
-  if (periciaHandled) {
-    return;
+function getAccessDeniedMessage(access: "owner" | "admin" | "member"): string {
+  if (access === "owner") {
+    return "Esse comando é restrito ao dono do bot.";
   }
 
-  const combatHandled = await handleCombatInteraction(interaction, services);
-
-  if (combatHandled) {
-    return;
+  if (access === "admin") {
+    return "Você precisa ter Administrador ou Gerenciar Servidor para usar esse comando.";
   }
 
-  const configHandled = await handleConfigInteraction(interaction, services);
-
-  if (configHandled) {
-    return;
-  }
-
-  const helpHandled = await handleHelpInteraction(interaction, services);
-
-  if (helpHandled) {
-    return;
-  }
+  return "Você não tem permissão para usar esse comando.";
 }

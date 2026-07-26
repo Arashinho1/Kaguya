@@ -1,23 +1,20 @@
 import type { Guild } from "discord.js";
 
-import {
-  DEFAULT_ATTRIBUTES,
-  DEFAULT_CLANS,
-  DEFAULT_GUILD_SETTINGS,
-  DEFAULT_JUTSU_TYPES,
-  DEFAULT_MODULE_STATUS,
-  DEFAULT_PERICIAS,
-  DEFAULT_PREFIX,
-  DEFAULT_RANKS,
-  DEFAULT_VILLAGES,
-  type GuildModuleKey
-} from "../../config/defaults.js";
-import { DEFAULT_JUTSU_DATA } from "../../config/defaultJutsus.js";
+import { listModules } from "../../core/modules/registry.js";
 import { Prisma, type PrismaClient, type RpgGuild } from "../../generated/prisma/client.js";
 
 export const ADMIN_COMMAND_PERMISSION = "command.admin";
+const DEFAULT_PREFIX = ".";
+const ENABLED_MODULES_KEY = "enabledModules";
 
-type ModuleStatus = Record<GuildModuleKey, boolean>;
+export interface SettingInput {
+  key: string;
+  label: string;
+  description?: string;
+  value: Prisma.InputJsonValue;
+  valueType: "STRING" | "NUMBER" | "BOOLEAN" | "JSON" | "CHANNEL" | "ROLE" | "USER";
+  isPublic?: boolean;
+}
 
 export class GuildConfigService {
   private readonly prefixCache = new Map<string, string>();
@@ -41,7 +38,6 @@ export class GuildConfigService {
 
   public async getPrefix(guild: Guild): Promise<string> {
     const cached = this.prefixCache.get(guild.id);
-
     if (cached) {
       return cached;
     }
@@ -73,563 +69,24 @@ export class GuildConfigService {
     return updated;
   }
 
-  public async seedGuildDefaults(guild: Guild, actorId: string): Promise<void> {
-    const rpgGuild = await this.ensureGuild(guild);
-
-    for (const setting of DEFAULT_GUILD_SETTINGS) {
-      await this.prisma.guildSetting.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: setting.key
-          }
-        },
-        update: {
-          label: setting.label,
-          description: setting.description,
-          valueType: setting.valueType,
-          isPublic: setting.isPublic
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: setting.key,
-          label: setting.label,
-          description: setting.description,
-          value: setting.value as Prisma.InputJsonValue,
-          valueType: setting.valueType,
-          isPublic: setting.isPublic
-        }
-      });
-    }
-
-    for (const attribute of DEFAULT_ATTRIBUTES) {
-      await this.prisma.attributeDefinition.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: attribute.key
-          }
-        },
-        update: {
-          name: attribute.name,
-          description: "description" in attribute ? attribute.description : undefined,
-          sortOrder: attribute.sortOrder
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: attribute.key,
-          name: attribute.name,
-          description: "description" in attribute ? attribute.description : undefined,
-          sortOrder: attribute.sortOrder
-        }
-      });
-    }
-
-    for (const rank of DEFAULT_RANKS) {
-      const desc = "description" in rank ? rank.description : undefined;
-      await this.prisma.rankDefinition.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: rank.key
-          }
-        },
-        update: {
-          name: rank.name,
-          description: desc,
-          sortOrder: rank.sortOrder
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: rank.key,
-          name: rank.name,
-          description: desc,
-          sortOrder: rank.sortOrder
-        }
-      });
-    }
-
-    for (const pericia of DEFAULT_PERICIAS) {
-      await this.prisma.periciaDefinition.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: pericia.key
-          }
-        },
-        update: {
-          name: pericia.name,
-          sortOrder: pericia.sortOrder
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: pericia.key,
-          name: pericia.name,
-          sortOrder: pericia.sortOrder
-        }
-      });
-    }
-
-    // Resolve IDs de perícias antes de vincular os tipos de jutsu a elas
-    const allPericias = await this.prisma.periciaDefinition.findMany({ where: { guildId: rpgGuild.id } });
-    const periciaMap = new Map(allPericias.map((p) => [p.key, p.id]));
-
-    for (const type of DEFAULT_JUTSU_TYPES) {
-      const periciaId = "periciaKey" in type ? periciaMap.get(type.periciaKey) ?? null : null;
-
-      await this.prisma.jutsuType.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: type.key
-          }
-        },
-        update: {
-          name: type.name,
-          periciaId
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: type.key,
-          name: type.name,
-          periciaId
-        }
-      });
-    }
-
-    for (const village of DEFAULT_VILLAGES) {
-      await this.prisma.village.upsert({
-        where: { guildId_name: { guildId: rpgGuild.id, name: village.name } },
-        update: {},
-        create: { guildId: rpgGuild.id, name: village.name, description: village.description }
-      });
-    }
-
-    for (const clan of DEFAULT_CLANS) {
-      await this.prisma.clan.upsert({
-        where: { guildId_name: { guildId: rpgGuild.id, name: clan.name } },
-        update: {},
-        create: { guildId: rpgGuild.id, name: clan.name, description: clan.description }
-      });
-    }
-
-    // Resolve IDs de tipos de jutsu antes de criar os jutsus padrão
-    const allTypes = await this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } });
-    const typeMap = new Map(allTypes.map((t) => [t.key, t.id]));
-
-    for (const jutsu of DEFAULT_JUTSU_DATA) {
-      await this.prisma.jutsuDefinition.upsert({
-        where: {
-          guildId_key: {
-            guildId: rpgGuild.id,
-            key: jutsu.key
-          }
-        },
-        update: {
-          name: jutsu.name,
-          description: jutsu.description ?? null,
-          typeId: typeMap.get(jutsu.typeKey) ?? null,
-          jutsuRank: jutsu.jutsuRank ?? null,
-          chakraCost: jutsu.chakraCost,
-          duration: jutsu.duration ?? null,
-          usageLimit: jutsu.usageLimit ?? null
-        },
-        create: {
-          guildId: rpgGuild.id,
-          key: jutsu.key,
-          name: jutsu.name,
-          description: jutsu.description ?? null,
-          typeId: typeMap.get(jutsu.typeKey) ?? null,
-          requiredRankId: null,
-          jutsuRank: jutsu.jutsuRank ?? null,
-          chakraCost: jutsu.chakraCost,
-          duration: jutsu.duration ?? null,
-          usageLimit: jutsu.usageLimit ?? null
-        }
-      });
-    }
-
-    await this.writeAuditLog({
-      guildId: rpgGuild.id,
-      actorId,
-      action: "guild.defaults.seed",
-      targetType: "RpgGuild",
-      targetId: rpgGuild.id,
-      after: {
-        settings: DEFAULT_GUILD_SETTINGS.length,
-        attributes: DEFAULT_ATTRIBUTES.length,
-        ranks: DEFAULT_RANKS.length,
-        villages: DEFAULT_VILLAGES.length,
-        clans: DEFAULT_CLANS.length,
-        jutsuTypes: DEFAULT_JUTSU_TYPES.length,
-        jutsus: DEFAULT_JUTSU_DATA.length,
-        pericias: DEFAULT_PERICIAS.length
-      }
-    });
-  }
-
-  public async syncCanonicalJutsus(
-    guild: Guild,
-    actorId: string
-  ): Promise<{ created: number; skipped: number; repaired: number }> {
-    const rpgGuild = await this.ensureGuild(guild);
-
-    // Garante que todas as perícias canônicas existem ANTES de resolver periciaIds dos tipos
-    for (const pericia of DEFAULT_PERICIAS) {
-      await this.prisma.periciaDefinition.upsert({
-        where: { guildId_key: { guildId: rpgGuild.id, key: pericia.key } },
-        update: { name: pericia.name, sortOrder: pericia.sortOrder },
-        create: { guildId: rpgGuild.id, key: pericia.key, name: pericia.name, sortOrder: pericia.sortOrder }
-      });
-    }
-
-    const allPericias = await this.prisma.periciaDefinition.findMany({ where: { guildId: rpgGuild.id } });
-    const periciaMap  = new Map(allPericias.map((p) => [p.key, p.id]));
-
-    // Garante que todos os tipos canônicos existem no banco ANTES de resolver typeIds
-    for (const typeData of DEFAULT_JUTSU_TYPES) {
-      const periciaId = "periciaKey" in typeData ? periciaMap.get(typeData.periciaKey) ?? null : null;
-
-      await this.prisma.jutsuType.upsert({
-        where: { guildId_key: { guildId: rpgGuild.id, key: typeData.key } },
-        update:  { name: typeData.name, periciaId },
-        create:  { guildId: rpgGuild.id, key: typeData.key, name: typeData.name, periciaId }
-      });
-    }
-
-    const [allTypes, existingJutsus] = await Promise.all([
-      this.prisma.jutsuType.findMany({ where: { guildId: rpgGuild.id } }),
-      this.prisma.jutsuDefinition.findMany({
-        where: { guildId: rpgGuild.id },
-        select: { key: true, typeId: true, jutsuRank: true }
-      })
-    ]);
-
-    const typeMap    = new Map(allTypes.map((t) => [t.key, t.id]));
-    const existingMap = new Map(existingJutsus.map((j) => [j.key, j]));
-
-    let created = 0;
-    let skipped = 0;
-    let repaired = 0;
-
-    for (const jutsu of DEFAULT_JUTSU_DATA) {
-      const existing = existingMap.get(jutsu.key);
-
-      if (existing) {
-        // Reparar typeId ou jutsuRank se estiverem null (seeded antes dos tipos existirem)
-        const canonicalTypeId = typeMap.get(jutsu.typeKey) ?? null;
-        const needsRepair =
-          (canonicalTypeId && existing.typeId !== canonicalTypeId) ||
-          (jutsu.jutsuRank && existing.jutsuRank !== jutsu.jutsuRank);
-
-        if (needsRepair) {
-          await this.prisma.jutsuDefinition.update({
-            where: { guildId_key: { guildId: rpgGuild.id, key: jutsu.key } },
-            data: {
-              ...(canonicalTypeId ? { typeId: canonicalTypeId } : {}),
-              ...(jutsu.jutsuRank ? { jutsuRank: jutsu.jutsuRank } : {})
-            }
-          });
-          repaired++;
-        } else {
-          skipped++;
-        }
-        continue;
-      }
-
-      await this.prisma.jutsuDefinition.create({
-        data: {
-          guildId: rpgGuild.id,
-          key: jutsu.key,
-          name: jutsu.name,
-          description: jutsu.description ?? null,
-          typeId: typeMap.get(jutsu.typeKey) ?? null,
-          jutsuRank: jutsu.jutsuRank ?? null,
-          chakraCost: jutsu.chakraCost,
-          duration: jutsu.duration ?? null,
-          usageLimit: jutsu.usageLimit ?? null
-        }
-      });
-      created++;
-    }
-
-    if (created > 0) {
-      await this.writeAuditLog({
-        guildId: rpgGuild.id,
-        actorId,
-        action: "guild.jutsus.sync",
-        targetType: "JutsuDefinition",
-        after: { created, skipped, total: DEFAULT_JUTSU_DATA.length }
-      });
-    }
-
-    return { created, skipped: skipped + repaired, repaired };
-  }
-
-  public async getGuildOverview(guild: Guild): Promise<{
-    prefix: string;
-    settingsCount: number;
-    attributesCount: number;
-    ranksCount: number;
-    jutsuTypesCount: number;
-    jutsusCount: number;
-    activeModulesCount: number;
-    modulesCount: number;
-  }> {
-    const rpgGuild = await this.ensureGuild(guild);
-
-    const [settingsCount, attributesCount, ranksCount, jutsuTypesCount, jutsusCount, moduleStatus] = await Promise.all([
-      this.prisma.guildSetting.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.attributeDefinition.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.rankDefinition.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.jutsuType.count({ where: { guildId: rpgGuild.id } }),
-      this.prisma.jutsuDefinition.count({ where: { guildId: rpgGuild.id } }),
-      this.getModuleStatus(guild)
-    ]);
-    const modules = Object.values(moduleStatus);
-
-    return {
-      prefix: rpgGuild.prefix,
-      settingsCount,
-      attributesCount,
-      ranksCount,
-      jutsuTypesCount,
-      jutsusCount,
-      activeModulesCount: modules.filter(Boolean).length,
-      modulesCount: modules.length
-    };
-  }
-
-  public async getModuleStatus(guild: Guild): Promise<ModuleStatus> {
+  public async getSetting(guild: Guild, key: string): Promise<unknown> {
     const rpgGuild = await this.ensureGuild(guild);
     const setting = await this.prisma.guildSetting.findUnique({
-      where: {
-        guildId_key: {
-          guildId: rpgGuild.id,
-          key: "enabledModules"
-        }
-      }
+      where: { guildId_key: { guildId: rpgGuild.id, key } }
     });
 
-    return normalizeModuleStatus(setting?.value);
+    return setting?.value;
   }
 
-  public async isModuleEnabled(guild: Guild, moduleKey: GuildModuleKey): Promise<boolean> {
-    const status = await this.getModuleStatus(guild);
-    return status[moduleKey];
-  }
-
-  public async setModuleEnabled(
-    guild: Guild,
-    actorId: string,
-    moduleKey: GuildModuleKey,
-    enabled: boolean
-  ): Promise<ModuleStatus> {
-    const current = await this.getModuleStatus(guild);
-    const next: ModuleStatus = {
-      ...current,
-      [moduleKey]: enabled
-    };
-
-    await this.setSetting(guild, actorId, {
-      key: "enabledModules",
-      label: "Módulos ativos",
-      description: "Define quais módulos do bot estão ativos neste servidor.",
-      value: next as unknown as Prisma.InputJsonValue,
-      valueType: "JSON",
-      isPublic: false
-    });
-
-    return next;
-  }
-
-  public async setLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
-    await this.setSetting(guild, actorId, {
-      key: "logChannelId",
-      label: "Log administrativo",
-      description: "Canal usado para registrar alterações administrativas.",
-      value: channelId,
-      valueType: "CHANNEL",
-      isPublic: false
-    });
-  }
-
-  public async getLogChannelId(guild: Guild): Promise<string | null> {
-    const rpgGuild = await this.ensureGuild(guild);
-    const setting = await this.prisma.guildSetting.findUnique({
-      where: {
-        guildId_key: {
-          guildId: rpgGuild.id,
-          key: "logChannelId"
-        }
-      }
-    });
-
-    return typeof setting?.value === "string" && setting.value.length > 0 ? setting.value : null;
-  }
-
-  public async setCommandLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
-    await this.setSetting(guild, actorId, {
-      key: "commandLogChannelId",
-      label: "Log de comandos",
-      description: "Canal usado para registrar comandos executados neste servidor.",
-      value: channelId,
-      valueType: "CHANNEL",
-      isPublic: false
-    });
-  }
-
-  public async getCommandLogChannelId(guild: Guild): Promise<string | null> {
-    const rpgGuild = await this.ensureGuild(guild);
-    const setting = await this.prisma.guildSetting.findUnique({
-      where: {
-        guildId_key: {
-          guildId: rpgGuild.id,
-          key: "commandLogChannelId"
-        }
-      }
-    });
-
-    return typeof setting?.value === "string" && setting.value.length > 0 ? setting.value : null;
-  }
-
-  public async listRolePermissions(guild: Guild, permission: string): Promise<string[]> {
-    const rpgGuild = await this.ensureGuild(guild);
-    const permissions = await this.prisma.guildRolePermission.findMany({
-      where: {
-        guildId: rpgGuild.id,
-        permission
-      },
-      orderBy: { createdAt: "asc" }
-    });
-
-    return permissions.map((entry) => entry.roleId);
-  }
-
-  public async hasAnyRolePermission(
-    guild: Guild,
-    roleIds: Iterable<string>,
-    permission: string
-  ): Promise<boolean> {
-    const roles = [...roleIds];
-
-    if (roles.length === 0) {
-      return false;
-    }
-
-    const rpgGuild = await this.ensureGuild(guild);
-    const count = await this.prisma.guildRolePermission.count({
-      where: {
-        guildId: rpgGuild.id,
-        permission,
-        roleId: { in: roles }
-      }
-    });
-
-    return count > 0;
-  }
-
-  public async grantRolePermission(
-    guild: Guild,
-    actorId: string,
-    roleId: string,
-    permission: string
-  ): Promise<void> {
-    const rpgGuild = await this.ensureGuild(guild);
-
-    await this.prisma.guildRolePermission.upsert({
-      where: {
-        guildId_roleId_permission: {
-          guildId: rpgGuild.id,
-          roleId,
-          permission
-        }
-      },
-      update: {},
-      create: {
-        guildId: rpgGuild.id,
-        roleId,
-        permission
-      }
-    });
-
-    await this.writeAuditLog({
-      guildId: rpgGuild.id,
-      actorId,
-      action: "guild.permission.role.grant",
-      targetType: "GuildRolePermission",
-      targetId: `${roleId}:${permission}`,
-      after: { roleId, permission }
-    });
-  }
-
-  public async revokeRolePermission(
-    guild: Guild,
-    actorId: string,
-    roleId: string,
-    permission: string
-  ): Promise<boolean> {
-    const rpgGuild = await this.ensureGuild(guild);
-    const existing = await this.prisma.guildRolePermission.findUnique({
-      where: {
-        guildId_roleId_permission: {
-          guildId: rpgGuild.id,
-          roleId,
-          permission
-        }
-      }
-    });
-
-    if (!existing) {
-      return false;
-    }
-
-    await this.prisma.guildRolePermission.delete({
-      where: { id: existing.id }
-    });
-
-    await this.writeAuditLog({
-      guildId: rpgGuild.id,
-      actorId,
-      action: "guild.permission.role.revoke",
-      targetType: "GuildRolePermission",
-      targetId: `${roleId}:${permission}`,
-      before: { roleId, permission }
-    });
-
-    return true;
-  }
-
-  public async setSetting(
-    guild: Guild,
-    actorId: string,
-    setting: {
-      key: string;
-      label: string;
-      description?: string;
-      value: Prisma.InputJsonValue;
-      valueType: "STRING" | "NUMBER" | "BOOLEAN" | "JSON" | "CHANNEL" | "ROLE" | "USER";
-      isPublic?: boolean;
-    }
-  ): Promise<void> {
+  public async setSetting(guild: Guild, actorId: string, setting: SettingInput): Promise<void> {
     const rpgGuild = await this.ensureGuild(guild);
 
     const current = await this.prisma.guildSetting.findUnique({
-      where: {
-        guildId_key: {
-          guildId: rpgGuild.id,
-          key: setting.key
-        }
-      }
+      where: { guildId_key: { guildId: rpgGuild.id, key: setting.key } }
     });
 
     await this.prisma.guildSetting.upsert({
-      where: {
-        guildId_key: {
-          guildId: rpgGuild.id,
-          key: setting.key
-        }
-      },
+      where: { guildId_key: { guildId: rpgGuild.id, key: setting.key } },
       update: {
         label: setting.label,
         description: setting.description,
@@ -659,7 +116,184 @@ export class GuildConfigService {
     });
   }
 
-  private async writeAuditLog(input: {
+  /** Módulo desconhecido (nunca desativado explicitamente) é considerado ativo por padrão. */
+  public async isModuleEnabled(guild: Guild, moduleKey: string): Promise<boolean> {
+    const overrides = await this.getModuleOverrides(guild);
+    return overrides[moduleKey] ?? true;
+  }
+
+  public async setModuleEnabled(
+    guild: Guild,
+    actorId: string,
+    moduleKey: string,
+    enabled: boolean
+  ): Promise<void> {
+    const overrides = await this.getModuleOverrides(guild);
+    const next = { ...overrides, [moduleKey]: enabled };
+
+    await this.setSetting(guild, actorId, {
+      key: ENABLED_MODULES_KEY,
+      label: "Módulos ativos",
+      description: "Exceções (por servidor) à ativação padrão dos módulos do bot.",
+      value: next as unknown as Prisma.InputJsonValue,
+      valueType: "JSON",
+      isPublic: false
+    });
+  }
+
+  public async getModuleStatus(guild: Guild): Promise<Record<string, boolean>> {
+    const overrides = await this.getModuleOverrides(guild);
+    const status: Record<string, boolean> = {};
+
+    for (const module of listModules()) {
+      status[module.key] = overrides[module.key] ?? true;
+    }
+
+    return status;
+  }
+
+  private async getModuleOverrides(guild: Guild): Promise<Record<string, boolean>> {
+    const value = await this.getSetting(guild, ENABLED_MODULES_KEY);
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean"
+      )
+    );
+  }
+
+  public async setLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
+    await this.setSetting(guild, actorId, {
+      key: "logChannelId",
+      label: "Log administrativo",
+      description: "Canal usado para registrar alterações administrativas.",
+      value: channelId,
+      valueType: "CHANNEL",
+      isPublic: false
+    });
+  }
+
+  public async getLogChannelId(guild: Guild): Promise<string | null> {
+    const value = await this.getSetting(guild, "logChannelId");
+    return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  public async setCommandLogChannel(guild: Guild, actorId: string, channelId: string): Promise<void> {
+    await this.setSetting(guild, actorId, {
+      key: "commandLogChannelId",
+      label: "Log de comandos",
+      description: "Canal usado para registrar comandos executados neste servidor.",
+      value: channelId,
+      valueType: "CHANNEL",
+      isPublic: false
+    });
+  }
+
+  public async getCommandLogChannelId(guild: Guild): Promise<string | null> {
+    const value = await this.getSetting(guild, "commandLogChannelId");
+    return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  public async listRolePermissions(guild: Guild, permission: string): Promise<string[]> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const permissions = await this.prisma.guildRolePermission.findMany({
+      where: { guildId: rpgGuild.id, permission },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return permissions.map((entry) => entry.roleId);
+  }
+
+  public async hasAnyRolePermission(
+    guild: Guild,
+    roleIds: Iterable<string>,
+    permission: string
+  ): Promise<boolean> {
+    const roles = [...roleIds];
+    if (roles.length === 0) {
+      return false;
+    }
+
+    const rpgGuild = await this.ensureGuild(guild);
+    const count = await this.prisma.guildRolePermission.count({
+      where: { guildId: rpgGuild.id, permission, roleId: { in: roles } }
+    });
+
+    return count > 0;
+  }
+
+  public async grantRolePermission(
+    guild: Guild,
+    actorId: string,
+    roleId: string,
+    permission: string
+  ): Promise<void> {
+    const rpgGuild = await this.ensureGuild(guild);
+
+    await this.prisma.guildRolePermission.upsert({
+      where: { guildId_roleId_permission: { guildId: rpgGuild.id, roleId, permission } },
+      update: {},
+      create: { guildId: rpgGuild.id, roleId, permission }
+    });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "guild.permission.role.grant",
+      targetType: "GuildRolePermission",
+      targetId: `${roleId}:${permission}`,
+      after: { roleId, permission }
+    });
+  }
+
+  public async revokeRolePermission(
+    guild: Guild,
+    actorId: string,
+    roleId: string,
+    permission: string
+  ): Promise<boolean> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const existing = await this.prisma.guildRolePermission.findUnique({
+      where: { guildId_roleId_permission: { guildId: rpgGuild.id, roleId, permission } }
+    });
+
+    if (!existing) {
+      return false;
+    }
+
+    await this.prisma.guildRolePermission.delete({ where: { id: existing.id } });
+
+    await this.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "guild.permission.role.revoke",
+      targetType: "GuildRolePermission",
+      targetId: `${roleId}:${permission}`,
+      before: { roleId, permission }
+    });
+
+    return true;
+  }
+
+  public async getGuildOverview(guild: Guild): Promise<{
+    prefix: string;
+    settingsCount: number;
+    modules: Record<string, boolean>;
+  }> {
+    const rpgGuild = await this.ensureGuild(guild);
+    const [settingsCount, modules] = await Promise.all([
+      this.prisma.guildSetting.count({ where: { guildId: rpgGuild.id } }),
+      this.getModuleStatus(guild)
+    ]);
+
+    return { prefix: rpgGuild.prefix, settingsCount, modules };
+  }
+
+  public async writeAuditLog(input: {
     guildId: string;
     actorId: string;
     action: string;
@@ -682,20 +316,4 @@ export class GuildConfigService {
       }
     });
   }
-}
-
-function normalizeModuleStatus(value: unknown): ModuleStatus {
-  const fallback = { ...DEFAULT_MODULE_STATUS };
-
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-
-  const record = value as Record<string, unknown>;
-  return Object.fromEntries(
-    Object.entries(fallback).map(([key, defaultValue]) => [
-      key,
-      typeof record[key] === "boolean" ? record[key] : defaultValue
-    ])
-  ) as ModuleStatus;
 }
