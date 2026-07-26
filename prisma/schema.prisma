@@ -30,6 +30,7 @@ model RpgGuild {
   permissions GuildRolePermission[]
   auditLogs   AuditLog[]
   attributes  AttributeDefinition[]
+  characters  Character[]
 
   @@map("rpg_guilds")
 }
@@ -86,6 +87,24 @@ model AttributeDefinition {
   @@unique([guildId, key])
   @@index([guildId])
   @@map("attribute_definitions")
+}
+
+model Character {
+  id         String   @id @default(cuid())
+  guildId    String
+  userId     String
+  name       String
+  attributes Json     @default("{}")
+  metadata   Json     @default("{}")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, name])
+  @@index([guildId, userId])
+  @@map("characters")
 }
 
 model AuditLog {

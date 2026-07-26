@@ -27,6 +27,8 @@ export interface CommandGroupDefinition<TServices, TModule extends string = stri
   access: CommandAccess;
   module?: TModule;
   subcommands: readonly SubcommandDefinition<readonly ArgDef[], TServices>[];
+  /** No modo prefixo, `.comando` sem subcomando explícito roda este. Slash sempre exige o subcomando. */
+  defaultSubcommand?: string;
 }
 
 /**
@@ -66,14 +68,25 @@ export function defineCommandGroup<TServices, TModule extends string = string>(
     },
 
     async executeFromMessage(message: Message<true>, rawArgs: string[], services: TServices): Promise<void> {
-      const [subName, ...rest] = rawArgs;
+      const [firstToken, ...restIfExplicit] = rawArgs;
+      const explicit = firstToken !== undefined ? findSubcommand(firstToken) : undefined;
 
-      if (!subName) {
+      let sub: SubcommandDefinition<readonly ArgDef[], TServices> | undefined;
+      let rest: string[];
+
+      if (explicit) {
+        sub = explicit;
+        rest = restIfExplicit;
+      } else if (def.defaultSubcommand) {
+        sub = findSubcommand(def.defaultSubcommand);
+        rest = rawArgs;
+      } else if (!firstToken) {
         await message.reply(`Use um subcomando: ${subcommandNames}.`);
         return;
+      } else {
+        await message.reply(`Subcomando desconhecido. Opções: ${subcommandNames}.`);
+        return;
       }
-
-      const sub = findSubcommand(subName);
 
       if (!sub) {
         await message.reply(`Subcomando desconhecido. Opções: ${subcommandNames}.`);

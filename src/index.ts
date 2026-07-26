@@ -7,6 +7,7 @@ import { closeDatabase, prisma } from "./database/prisma.js";
 import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
+import { CharacterService } from "./modules/characters/CharacterService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import type { CommandServices } from "./types/command.js";
 
@@ -17,10 +18,12 @@ const client = new Client({
 
 const guildConfig = new GuildConfigService(prisma);
 const attributes = new AttributeService(prisma, guildConfig);
+const characters = new CharacterService(prisma, guildConfig, attributes);
 
 const services: CommandServices = {
   guildConfig,
-  attributes
+  attributes,
+  characters
 };
 
 client.once(Events.ClientReady, (readyClient) => {
