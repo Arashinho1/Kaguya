@@ -59,6 +59,16 @@ export class CharacterService {
     });
   }
 
+  /**
+   * Estado atual do personagem por id, direto do banco. Serviços que fazem leitura-then-write
+   * sobre o snapshot de atributos (treino, perícias, ...) devem chamar isto imediatamente antes
+   * de calcular/gravar em vez de confiar num CharacterWithWorld que o chamador guardou antes —
+   * evita lost-update se o objeto em mãos estiver desatualizado.
+   */
+  public async getById(characterId: string): Promise<CharacterWithWorld | null> {
+    return this.prisma.character.findUnique({ where: { id: characterId }, include: WORLD_INCLUDE });
+  }
+
   public async createCharacter(guild: Guild, userId: string, name: string): Promise<CharacterWithWorld> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
 
@@ -142,9 +152,27 @@ export class CharacterService {
     });
   }
 
+  public getBaseAttributeSnapshot(character: CharacterWithWorld): Record<string, number> {
+    return isRecordOfNumbers(character.attributes) ? character.attributes : {};
+  }
+
+  public async updateAttributeSnapshot(
+    character: CharacterWithWorld,
+    key: string,
+    newValue: number
+  ): Promise<CharacterWithWorld> {
+    const snapshot = { ...this.getBaseAttributeSnapshot(character), [key]: newValue };
+
+    return this.prisma.character.update({
+      where: { id: character.id },
+      data: { attributes: snapshot },
+      include: WORLD_INCLUDE
+    });
+  }
+
   public async getCharacterView(guild: Guild, character: CharacterWithWorld): Promise<CharacterView> {
     const activeAttributes = await this.attributes.listAttributes(guild);
-    const snapshot = isRecordOfNumbers(character.attributes) ? character.attributes : {};
+    const snapshot = this.getBaseAttributeSnapshot(character);
 
     const combinedBonuses: Record<string, number> = {};
     for (const source of [character.clan?.bonuses, character.village?.bonuses, character.rank?.bonuses]) {

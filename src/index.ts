@@ -9,6 +9,7 @@ import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
+import { TrainingService } from "./modules/training/TrainingService.js";
 import { WorldConfigService } from "./modules/world/WorldConfigService.js";
 import type { CommandServices } from "./types/command.js";
 
@@ -21,12 +22,14 @@ const guildConfig = new GuildConfigService(prisma);
 const attributes = new AttributeService(prisma, guildConfig);
 const world = new WorldConfigService(prisma, guildConfig);
 const characters = new CharacterService(prisma, guildConfig, attributes, world);
+const training = new TrainingService(prisma, guildConfig, attributes, characters);
 
 const services: CommandServices = {
   guildConfig,
   attributes,
   characters,
-  world
+  world,
+  training
 };
 
 client.once(Events.ClientReady, (readyClient) => {

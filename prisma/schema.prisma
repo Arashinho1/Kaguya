@@ -34,6 +34,8 @@ model RpgGuild {
   clans       Clan[]
   villages    Village[]
   ranks       RankDefinition[]
+  progress    CharacterProgress[]
+  trainingLogs TrainingLog[]
 
   @@map("rpg_guilds")
 }
@@ -110,10 +112,49 @@ model Character {
   clan    Clan?           @relation(fields: [clanId], references: [id], onDelete: SetNull)
   village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
   rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
+  progress     CharacterProgress?
+  trainingLogs TrainingLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
   @@map("characters")
+}
+
+model CharacterProgress {
+  id             String   @id @default(cuid())
+  guildId        String
+  characterId    String   @unique
+  trainingPoints Int      @default(0)
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId])
+  @@map("character_progress")
+}
+
+model TrainingLog {
+  id           String   @id @default(cuid())
+  guildId      String
+  characterId  String
+  actorId      String
+  action       String
+  attributeKey String?
+  amount       Int      @default(0)
+  cost         Int      @default(0)
+  before       Json?
+  after        Json?
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  guild     RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@map("training_logs")
 }
 
 model Clan {
