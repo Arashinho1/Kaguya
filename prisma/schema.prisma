@@ -36,6 +36,9 @@ model RpgGuild {
   ranks       RankDefinition[]
   progress    CharacterProgress[]
   trainingLogs TrainingLog[]
+  periciaDefinitions PericiaDefinition[]
+  characterPericias  CharacterPericia[]
+  periciaXpLogs      PericiaXpLog[]
 
   @@map("rpg_guilds")
 }
@@ -112,8 +115,10 @@ model Character {
   clan    Clan?           @relation(fields: [clanId], references: [id], onDelete: SetNull)
   village Village?        @relation(fields: [villageId], references: [id], onDelete: SetNull)
   rank    RankDefinition? @relation(fields: [rankId], references: [id], onDelete: SetNull)
-  progress     CharacterProgress?
-  trainingLogs TrainingLog[]
+  progress          CharacterProgress?
+  trainingLogs      TrainingLog[]
+  periciaProgress   CharacterPericia[]
+  periciaXpLogs     PericiaXpLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -212,6 +217,68 @@ model RankDefinition {
   @@unique([guildId, key])
   @@index([guildId])
   @@map("rank_definitions")
+}
+
+model PericiaDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild    RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  progress CharacterPericia[]
+  xpLogs   PericiaXpLog[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("pericia_definitions")
+}
+
+model CharacterPericia {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  periciaId   String
+  xp          Int      @default(0)
+  level       Int      @default(1)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild     RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pericia   PericiaDefinition @relation(fields: [periciaId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, periciaId])
+  @@index([guildId, characterId])
+  @@map("character_pericias")
+}
+
+model PericiaXpLog {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  periciaId   String
+  actorId     String
+  xpGained    Int      @default(0)
+  xpBefore    Int      @default(0)
+  xpAfter     Int      @default(0)
+  levelBefore Int      @default(1)
+  levelAfter  Int      @default(1)
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  guild     RpgGuild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pericia   PericiaDefinition @relation(fields: [periciaId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@map("pericia_xp_logs")
 }
 
 model AuditLog {
