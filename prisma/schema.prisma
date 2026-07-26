@@ -43,6 +43,7 @@ model RpgGuild {
   jutsuDefinitions   JutsuDefinition[]
   learnedJutsus      CharacterJutsu[]
   jutsuUseLogs       JutsuUseLog[]
+  duelEncounters     DuelEncounter[]
 
   @@map("rpg_guilds")
 }
@@ -125,6 +126,9 @@ model Character {
   periciaXpLogs     PericiaXpLog[]
   learnedJutsus     CharacterJutsu[]
   jutsuUseLogs      JutsuUseLog[]
+  duelsAsChallenger DuelEncounter[] @relation("DuelChallenger")
+  duelsAsOpponent   DuelEncounter[] @relation("DuelOpponent")
+  duelsWon          DuelEncounter[] @relation("DuelWinner")
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -371,6 +375,34 @@ model JutsuUseLog {
 
   @@index([guildId, characterId, createdAt])
   @@map("jutsu_use_logs")
+}
+
+enum DuelStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+model DuelEncounter {
+  id                    String     @id @default(cuid())
+  guildId               String
+  channelId             String
+  challengerCharacterId String
+  opponentCharacterId   String
+  status                DuelStatus @default(PENDING)
+  isForced              Boolean    @default(false)
+  winnerCharacterId     String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  endedAt               DateTime?
+
+  guild      RpgGuild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  challenger Character @relation("DuelChallenger", fields: [challengerCharacterId], references: [id], onDelete: Cascade)
+  opponent   Character @relation("DuelOpponent", fields: [opponentCharacterId], references: [id], onDelete: Cascade)
+  winner     Character? @relation("DuelWinner", fields: [winnerCharacterId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, channelId, status])
+  @@map("duel_encounters")
 }
 
 model AuditLog {

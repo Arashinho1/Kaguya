@@ -240,6 +240,31 @@ export class JutsuService {
     return this.prisma.jutsuDefinition.findUnique({ where: { guildId_key: { guildId: rpgGuild.id, key } } });
   }
 
+  /**
+   * Casamento tolerante por nome/chave, usado pela detecção narrada de `[jutsu]` no chat —
+   * texto livre nunca vai bater 100% certo com um nome longo, então aceita match parcial em
+   * vez de exigir a chave exata. Sem match nenhum, retorna null (o chamador deve ficar em
+   * silêncio, não travar a narrativa do jogador com erro).
+   */
+  public async findJutsuFuzzy(guild: Guild, rawText: string): Promise<JutsuDefinition | null> {
+    const needle = normalizeForMatch(rawText);
+    if (!needle) return null;
+
+    const jutsus = await this.listJutsus(guild);
+
+    const exact = jutsus.find(
+      (jutsu) => normalizeForMatch(jutsu.name) === needle || normalizeForMatch(jutsu.key) === needle
+    );
+    if (exact) return exact;
+
+    return (
+      jutsus.find((jutsu) => {
+        const name = normalizeForMatch(jutsu.name);
+        return name.includes(needle) || needle.includes(name);
+      }) ?? null
+    );
+  }
+
   // ─── Custo de Chakra por rank ──────────────────────────────────────────────
 
   public async getChakraCostFormula(guild: Guild): Promise<FormulaNode> {
@@ -431,4 +456,10 @@ async function fetchExternalJutsuData(): Promise<{ categories: ExternalCategory[
 
   const [categories, jutsus] = await Promise.all([categoriesRes.json(), jutsusRes.json()]);
   return { categories, jutsus };
+}
+
+const COMBINING_DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalizeForMatch(text: string): string {
+  return text.normalize("NFD").replace(COMBINING_DIACRITICS, "").toLowerCase().trim();
 }

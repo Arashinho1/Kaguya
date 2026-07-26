@@ -8,6 +8,7 @@ import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
+import { CombatService } from "./modules/combat/CombatService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import { JutsuService } from "./modules/jutsus/JutsuService.js";
 import { PericiaService } from "./modules/pericias/PericiaService.js";
@@ -27,6 +28,7 @@ const characters = new CharacterService(prisma, guildConfig, attributes, world);
 const training = new TrainingService(prisma, guildConfig, attributes, characters);
 const pericias = new PericiaService(prisma, guildConfig);
 const jutsus = new JutsuService(prisma, guildConfig, characters, pericias);
+const combat = new CombatService(prisma, guildConfig);
 
 const services: CommandServices = {
   guildConfig,
@@ -35,7 +37,8 @@ const services: CommandServices = {
   world,
   training,
   pericias,
-  jutsus
+  jutsus,
+  combat
 };
 
 client.once(Events.ClientReady, (readyClient) => {

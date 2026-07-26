@@ -13,6 +13,7 @@ export async function handleMessageCreate(message: Message, services: CommandSer
   const prefix = await services.guildConfig.getPrefix(message.guild).catch(() => ".");
 
   if (!message.content.startsWith(prefix)) {
+    await handleNarratedJutsuUse(message, services);
     return;
   }
 
@@ -57,6 +58,66 @@ export async function handleMessageCreate(message: Message, services: CommandSer
     console.error(`[command:${command.name}]`, error);
     await message.reply("Não consegui executar esse comando. Verifique os logs do bot.");
   }
+}
+
+/**
+ * Detecção narrada de jutsu: só age se o autor tiver um duelo ATIVO neste canal — em
+ * qualquer outro contexto, texto entre colchetes é só... texto entre colchetes. Nenhum
+ * match não é erro (RP livre não deve ser punido); um jutsu reconhecido mas que falhou
+ * (não aprendido, chakra insuficiente) vira uma resposta curta.
+ */
+async function handleNarratedJutsuUse(message: Message<true>, services: CommandServices): Promise<void> {
+  if (!(await services.guildConfig.isModuleEnabled(message.guild, "combat").catch(() => true))) {
+    return;
+  }
+
+  const identifiers = extractBracketedText(message.content);
+  if (identifiers.length === 0) {
+    return;
+  }
+
+  const character = await services.characters.getActiveCharacter(message.guild, message.author.id);
+  if (!character) {
+    return;
+  }
+
+  const duel = await services.combat.getActiveDuelInChannel(message.guild, message.channelId);
+  if (!duel || (duel.challengerCharacterId !== character.id && duel.opponentCharacterId !== character.id)) {
+    return;
+  }
+
+  for (const text of identifiers) {
+    const jutsu = await services.jutsus.findJutsuFuzzy(message.guild, text);
+    if (!jutsu) {
+      continue;
+    }
+
+    try {
+      await services.jutsus.useJutsu(message.guild, message.author.id, character, jutsu.key);
+      await message.react("🔥").catch(() => {});
+    } catch (error) {
+      if (error instanceof DomainError) {
+        await message.reply(`\`${text}\`: ${error.message}`);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+function extractBracketedText(content: string): string[] {
+  const identifiers = new Set<string>();
+  const pattern = /\[([^\]\n]{1,120})\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    const identifier = match[1]?.trim();
+    if (identifier) {
+      identifiers.add(identifier);
+    }
+  }
+
+  return [...identifiers];
 }
 
 function getAccessDeniedMessage(access: "owner" | "admin" | "member"): string {
