@@ -9,6 +9,7 @@ import { handleMessageCreate } from "./events/messageCreate.js";
 import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { CharacterService } from "./modules/characters/CharacterService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
+import { JutsuService } from "./modules/jutsus/JutsuService.js";
 import { PericiaService } from "./modules/pericias/PericiaService.js";
 import { TrainingService } from "./modules/training/TrainingService.js";
 import { WorldConfigService } from "./modules/world/WorldConfigService.js";
@@ -25,6 +26,7 @@ const world = new WorldConfigService(prisma, guildConfig);
 const characters = new CharacterService(prisma, guildConfig, attributes, world);
 const training = new TrainingService(prisma, guildConfig, attributes, characters);
 const pericias = new PericiaService(prisma, guildConfig);
+const jutsus = new JutsuService(prisma, guildConfig, characters, pericias);
 
 const services: CommandServices = {
   guildConfig,
@@ -32,7 +34,8 @@ const services: CommandServices = {
   characters,
   world,
   training,
-  pericias
+  pericias,
+  jutsus
 };
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -41,7 +44,28 @@ client.once(Events.ClientReady, (readyClient) => {
   void deployGlobalSlashCommands(readyClient, commandRegistry).catch((error) => {
     console.error("[slash-deploy]", error);
   });
+
+  scheduleJutsuAutoSync(readyClient);
 });
+
+function scheduleJutsuAutoSync(readyClient: Client<true>): void {
+  const intervalMs = env.JUTSU_SYNC_INTERVAL_MINUTES * 60_000;
+
+  const runOnce = async (): Promise<void> => {
+    for (const guild of readyClient.guilds.cache.values()) {
+      try {
+        if (await jutsus.isAutoSyncEnabled(guild)) {
+          await jutsus.syncFromSource(guild, "auto-sync");
+        }
+      } catch (error) {
+        console.error(`[jutsu-auto-sync:${guild.id}]`, error);
+      }
+    }
+  };
+
+  setTimeout(() => void runOnce(), 30_000);
+  setInterval(() => void runOnce(), intervalMs);
+}
 
 client.on(Events.MessageCreate, (message) => {
   void handleMessageCreate(message, services);

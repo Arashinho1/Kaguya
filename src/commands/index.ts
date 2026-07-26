@@ -2,6 +2,7 @@ import { CommandRegistry } from "../core/commands/index.js";
 import type { CommandServices } from "../types/command.js";
 import { attributeAdminCommand, attributesCommand } from "./attributes.js";
 import { characterCommand } from "./characters.js";
+import { jutsuAdminCommand, jutsuCommand } from "./jutsus.js";
 import { periciaAdminCommand, periciasCommand } from "./pericias.js";
 import { setupCommand } from "./setup.js";
 import { paCommand, trainingCommand } from "./training.js";
@@ -18,7 +19,9 @@ for (const command of [
   trainingCommand,
   paCommand,
   periciasCommand,
-  periciaAdminCommand
+  periciaAdminCommand,
+  jutsuCommand,
+  jutsuAdminCommand
 ]) {
   commandRegistry.register(command);
 }

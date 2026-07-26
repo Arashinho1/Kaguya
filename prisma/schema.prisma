@@ -39,6 +39,10 @@ model RpgGuild {
   periciaDefinitions PericiaDefinition[]
   characterPericias  CharacterPericia[]
   periciaXpLogs      PericiaXpLog[]
+  jutsuTypes         JutsuType[]
+  jutsuDefinitions   JutsuDefinition[]
+  learnedJutsus      CharacterJutsu[]
+  jutsuUseLogs       JutsuUseLog[]
 
   @@map("rpg_guilds")
 }
@@ -119,6 +123,8 @@ model Character {
   trainingLogs      TrainingLog[]
   periciaProgress   CharacterPericia[]
   periciaXpLogs     PericiaXpLog[]
+  learnedJutsus     CharacterJutsu[]
+  jutsuUseLogs      JutsuUseLog[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -130,6 +136,7 @@ model CharacterProgress {
   guildId        String
   characterId    String   @unique
   trainingPoints Int      @default(0)
+  currentChakra  Int?
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -230,9 +237,10 @@ model PericiaDefinition {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  guild    RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  progress CharacterPericia[]
-  xpLogs   PericiaXpLog[]
+  guild      RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  progress   CharacterPericia[]
+  xpLogs     PericiaXpLog[]
+  jutsuTypes JutsuType[]
 
   @@unique([guildId, key])
   @@index([guildId])
@@ -279,6 +287,90 @@ model PericiaXpLog {
 
   @@index([guildId, characterId, createdAt])
   @@map("pericia_xp_logs")
+}
+
+model JutsuType {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  periciaId   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild   RpgGuild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  pericia PericiaDefinition? @relation(fields: [periciaId], references: [id], onDelete: SetNull)
+  jutsus  JutsuDefinition[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@index([periciaId])
+  @@map("jutsu_types")
+}
+
+model JutsuDefinition {
+  id           String   @id @default(cuid())
+  guildId      String
+  key          String
+  name         String
+  description  String?
+  typeId       String?
+  jutsuRank    String?
+  element      String?
+  requirements String?
+  imageUrl     String?
+  externalId   String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  guild     RpgGuild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  type      JutsuType?       @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  learnedBy CharacterJutsu[]
+  useLogs   JutsuUseLog[]
+
+  @@unique([guildId, key])
+  @@unique([guildId, externalId])
+  @@index([guildId])
+  @@index([typeId])
+  @@map("jutsu_definitions")
+}
+
+model CharacterJutsu {
+  id          String   @id @default(cuid())
+  guildId     String
+  characterId String
+  jutsuId     String
+  learnedAt   DateTime @default(now())
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  jutsu     JutsuDefinition @relation(fields: [jutsuId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, jutsuId])
+  @@index([guildId, characterId])
+  @@map("character_jutsus")
+}
+
+model JutsuUseLog {
+  id           String   @id @default(cuid())
+  guildId      String
+  characterId  String
+  jutsuId      String
+  actorId      String
+  chakraCost   Int      @default(0)
+  chakraBefore Int      @default(0)
+  chakraAfter  Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  guild     RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  jutsu     JutsuDefinition @relation(fields: [jutsuId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, characterId, createdAt])
+  @@map("jutsu_use_logs")
 }
 
 model AuditLog {
