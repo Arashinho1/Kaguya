@@ -1,6 +1,7 @@
 import type { Message } from "discord.js";
 
 import { commandRegistry } from "../commands/index.js";
+import { DomainError } from "../core/errors.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
@@ -49,6 +50,10 @@ export async function handleMessageCreate(message: Message, services: CommandSer
   try {
     await command.executeFromMessage(message, rawArgs, services);
   } catch (error) {
+    if (error instanceof DomainError) {
+      await message.reply(error.message);
+      return;
+    }
     console.error(`[command:${command.name}]`, error);
     await message.reply("Não consegui executar esse comando. Verifique os logs do bot.");
   }

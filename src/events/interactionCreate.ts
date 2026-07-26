@@ -1,6 +1,7 @@
 import type { Interaction } from "discord.js";
 
 import { commandRegistry } from "../commands/index.js";
+import { DomainError } from "../core/errors.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
@@ -41,8 +42,14 @@ export async function handleInteractionCreate(
   try {
     await command.executeFromInteraction(interaction, services);
   } catch (error) {
-    console.error(`[command:${command.name}]`, error);
-    const payload = { content: "Não consegui executar esse comando. Verifique os logs do bot.", ephemeral: true };
+    const payload = error instanceof DomainError
+      ? { content: error.message, ephemeral: true }
+      : { content: "Não consegui executar esse comando. Verifique os logs do bot.", ephemeral: true };
+
+    if (!(error instanceof DomainError)) {
+      console.error(`[command:${command.name}]`, error);
+    }
+
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(payload);
     } else {

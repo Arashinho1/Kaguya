@@ -29,6 +29,7 @@ model RpgGuild {
   settings    GuildSetting[]
   permissions GuildRolePermission[]
   auditLogs   AuditLog[]
+  attributes  AttributeDefinition[]
 
   @@map("rpg_guilds")
 }
@@ -64,6 +65,27 @@ model GuildRolePermission {
   @@unique([guildId, roleId, permission])
   @@index([guildId])
   @@map("guild_role_permissions")
+}
+
+model AttributeDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  key         String
+  name        String
+  description String?
+  baseValue   Int      @default(0)
+  minValue    Int      @default(0)
+  maxValue    Int?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild RpgGuild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@map("attribute_definitions")
 }
 
 model AuditLog {

@@ -1,4 +1,14 @@
-import type { ChatInputCommandInteraction, Guild, SlashCommandBuilder } from "discord.js";
+import type {
+  ChatInputCommandInteraction,
+  Guild,
+  SlashCommandBooleanOption,
+  SlashCommandChannelOption,
+  SlashCommandIntegerOption,
+  SlashCommandNumberOption,
+  SlashCommandRoleOption,
+  SlashCommandStringOption,
+  SlashCommandUserOption
+} from "discord.js";
 
 import { CommandArgError } from "./errors.js";
 import type { ArgDef } from "./types.js";
@@ -7,6 +17,20 @@ const USER_MENTION = /^<@!?(\d+)>$/;
 const CHANNEL_MENTION = /^<#(\d+)>$/;
 const ROLE_MENTION = /^<@&(\d+)>$/;
 const RAW_SNOWFLAKE = /^\d{17,20}$/;
+
+/**
+ * Subconjunto estrutural comum a SlashCommandBuilder e SlashCommandSubcommandBuilder —
+ * permite que applySlashOptions monte opções tanto num comando simples quanto num subcomando.
+ */
+export interface OptionableBuilder {
+  addStringOption(input: (option: SlashCommandStringOption) => SlashCommandStringOption): unknown;
+  addIntegerOption(input: (option: SlashCommandIntegerOption) => SlashCommandIntegerOption): unknown;
+  addNumberOption(input: (option: SlashCommandNumberOption) => SlashCommandNumberOption): unknown;
+  addBooleanOption(input: (option: SlashCommandBooleanOption) => SlashCommandBooleanOption): unknown;
+  addUserOption(input: (option: SlashCommandUserOption) => SlashCommandUserOption): unknown;
+  addChannelOption(input: (option: SlashCommandChannelOption) => SlashCommandChannelOption): unknown;
+  addRoleOption(input: (option: SlashCommandRoleOption) => SlashCommandRoleOption): unknown;
+}
 
 const TRUTHY = new Set(["true", "sim", "1", "on", "ativar", "ativo"]);
 const FALSY = new Set(["false", "nao", "não", "0", "off", "desativar", "inativo"]);
@@ -31,7 +55,7 @@ export function validateArgDefs(args: readonly ArgDef[]): void {
   });
 }
 
-export function applySlashOptions(builder: SlashCommandBuilder, args: readonly ArgDef[]): void {
+export function applySlashOptions(builder: OptionableBuilder, args: readonly ArgDef[]): void {
   for (const arg of args) {
     const required = arg.required ?? true;
 

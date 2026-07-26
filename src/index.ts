@@ -6,6 +6,7 @@ import { deployGlobalSlashCommands } from "./core/commands/index.js";
 import { closeDatabase, prisma } from "./database/prisma.js";
 import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
+import { AttributeService } from "./modules/attributes/AttributeService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import type { CommandServices } from "./types/command.js";
 
@@ -15,9 +16,11 @@ const client = new Client({
 });
 
 const guildConfig = new GuildConfigService(prisma);
+const attributes = new AttributeService(prisma, guildConfig);
 
 const services: CommandServices = {
-  guildConfig
+  guildConfig,
+  attributes
 };
 
 client.once(Events.ClientReady, (readyClient) => {
