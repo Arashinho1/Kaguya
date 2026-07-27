@@ -13,6 +13,73 @@ registerModule({
   description: "Catálogo de jutsus (sincronizado do site Mundo Ninja), aprendizado e uso com custo de Chakra."
 });
 
+const EMBED_COLOR = 0xff6b1a;
+
+const RANK_ORDER: Record<string, number> = { D: 1, C: 2, B: 3, A: 4, S: 5 };
+
+const RANK_COLOR: Record<string, number> = {
+  D: 0x95a5a6,
+  C: 0x2ecc71,
+  B: 0x3498db,
+  A: 0x9b59b6,
+  S: 0xe74c3c
+};
+
+const RANK_BADGE: Record<string, string> = {
+  D: "⚪",
+  C: "🟢",
+  B: "🔵",
+  A: "🟣",
+  S: "🔴"
+};
+
+const TYPE_EMOJI: Record<string, string> = {
+  ninjutsu: "🌀",
+  "ninjutsu-elemental": "🌪️",
+  taijutsu: "👊",
+  genjutsu: "🌀",
+  "kekkei-genkai": "🧬",
+  fuinjutsu: "🔏",
+  kenjutsu: "🗡️",
+  bukijutsu: "🏹"
+};
+
+const ELEMENT_EMOJI: Record<string, string> = {
+  Katon: "🔥",
+  Suiton: "💧",
+  Raiton: "⚡",
+  Doton: "🪨",
+  Futon: "🌪️",
+  Hyouton: "❄️",
+  Youton: "🌋",
+  Jinton: "💨",
+  Bakuton: "💥",
+  Mokuton: "🌳"
+};
+
+function rankBadge(rank: string | null): string {
+  return rank ? (RANK_BADGE[rank] ?? "⭐") : "❔";
+}
+
+function rankColor(rank: string | null): number {
+  return rank ? (RANK_COLOR[rank] ?? EMBED_COLOR) : EMBED_COLOR;
+}
+
+function typeEmoji(typeKey: string | undefined): string {
+  return (typeKey && TYPE_EMOJI[typeKey]) || "🥷";
+}
+
+function elementEmoji(element: string | null): string {
+  return element ? (ELEMENT_EMOJI[element] ?? "🌊") : "";
+}
+
+function sortByRank<T extends { jutsuRank: string | null; name: string }>(jutsus: T[]): T[] {
+  return [...jutsus].sort((a, b) => {
+    const diff = (RANK_ORDER[a.jutsuRank ?? ""] ?? 0) - (RANK_ORDER[b.jutsuRank ?? ""] ?? 0);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  });
+}
+
 async function requireActiveCharacter(ctx: {
   guild: Guild;
   user: User;
@@ -50,9 +117,10 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
       description: "Lista os tipos de jutsu e quantos jutsus ativos cada um tem.",
       args: catalogoArgs,
       async handler(ctx) {
-        const [types, jutsus] = await Promise.all([
+        const [types, jutsus, prefix] = await Promise.all([
           ctx.services.jutsus.listTypes(ctx.guild),
-          ctx.services.jutsus.listJutsus(ctx.guild)
+          ctx.services.jutsus.listJutsus(ctx.guild),
+          ctx.services.guildConfig.getPrefix(ctx.guild)
         ]);
 
         if (types.length === 0) {
@@ -68,16 +136,20 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
           counts.set(jutsu.typeId, (counts.get(jutsu.typeId) ?? 0) + 1);
         }
 
-        const lines = types.map((type) => `**${type.name}** \`[${type.key}]\` — ${counts.get(type.id) ?? 0} jutsu(s)`);
+        const embed = new EmbedBuilder()
+          .setColor(EMBED_COLOR)
+          .setTitle("🥷 Catálogo de Jutsus")
+          .setDescription(`**${jutsus.length}** jutsus catalogados neste servidor, agrupados por tipo.`)
+          .addFields(
+            types.map((type) => ({
+              name: `${typeEmoji(type.key)} ${type.name}`,
+              value: `\`${type.key}\`\n**${counts.get(type.id) ?? 0}** jutsu(s)`,
+              inline: true
+            }))
+          )
+          .setFooter({ text: `Use ${prefix}jutsu tipo <chave> para explorar um tipo, ou ${prefix}jutsu ver <chave> para ver um jutsu.` });
 
-        await ctx.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`Catálogo de jutsus (${jutsus.length} no total)`)
-              .setDescription(lines.join("\n"))
-              .setFooter({ text: "Use .jutsu tipo <chave> para ver os jutsus de um tipo." })
-          ]
-        });
+        await ctx.reply({ embeds: [embed] });
       }
     }),
 
@@ -86,22 +158,30 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
       description: "Lista os jutsus de um tipo.",
       args: tipoArgs,
       async handler(ctx) {
-        const jutsus = await ctx.services.jutsus.listJutsus(ctx.guild, { typeKey: ctx.args.chave });
+        const [type, jutsus, prefix] = await Promise.all([
+          ctx.services.jutsus.findType(ctx.guild, ctx.args.chave),
+          ctx.services.jutsus.listJutsus(ctx.guild, { typeKey: ctx.args.chave }),
+          ctx.services.guildConfig.getPrefix(ctx.guild)
+        ]);
 
         if (jutsus.length === 0) {
           await ctx.reply(`Nenhum jutsu ativo encontrado para o tipo \`${ctx.args.chave}\`.`);
           return;
         }
 
-        const shown = jutsus.slice(0, 40);
-        const lines = shown.map((j) => `**${j.name}** \`[${j.key}]\`${j.jutsuRank ? ` — rank ${j.jutsuRank}` : ""}`);
+        const shown = sortByRank(jutsus).slice(0, 40);
+        const lines = shown.map((j) => `${rankBadge(j.jutsuRank)} **${j.name}** \`[${j.key}]\``);
         if (jutsus.length > shown.length) {
-          lines.push(`…e mais ${jutsus.length - shown.length}.`);
+          lines.push(`…e mais ${jutsus.length - shown.length}. Refine com \`${prefix}jutsu ver <chave>\`.`);
         }
 
-        await ctx.reply({
-          embeds: [new EmbedBuilder().setTitle(`Jutsus — ${ctx.args.chave}`).setDescription(lines.join("\n"))]
-        });
+        const embed = new EmbedBuilder()
+          .setColor(EMBED_COLOR)
+          .setTitle(`${typeEmoji(type?.key)} ${type?.name ?? ctx.args.chave}`)
+          .setDescription(lines.join("\n"))
+          .setFooter({ text: "⚪D 🟢C 🔵B 🟣A 🔴S — use .jutsu ver <chave> para os detalhes." });
+
+        await ctx.reply({ embeds: [embed] });
       }
     }),
 
@@ -115,24 +195,38 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
           throw new JutsuRuleError(`Não encontrei o jutsu \`${ctx.args.chave}\`.`);
         }
 
-        const formula = await ctx.services.jutsus.getChakraCostFormula(ctx.guild);
+        const [formula, type] = await Promise.all([
+          ctx.services.jutsus.getChakraCostFormula(ctx.guild),
+          jutsu.typeId ? ctx.services.jutsus.listTypes(ctx.guild) : Promise.resolve([])
+        ]);
         const cost = ctx.services.jutsus.getChakraCostForRank(formula, jutsu.jutsuRank);
+        const typeName = type.find((t) => t.id === jutsu.typeId)?.name;
 
         const embed = new EmbedBuilder()
-          .setTitle(jutsu.name)
-          .setDescription(jutsu.description?.slice(0, 3900) ?? "Sem descrição.")
+          .setColor(rankColor(jutsu.jutsuRank))
+          .setTitle(`${rankBadge(jutsu.jutsuRank)} ${jutsu.name}`)
+          .setDescription(jutsu.description?.slice(0, 3900) ?? "Sem descrição cadastrada.")
           .addFields(
-            { name: "Rank", value: jutsu.jutsuRank ?? "—", inline: true },
-            { name: "Elemento", value: jutsu.element ?? "—", inline: true },
-            { name: "Custo de Chakra", value: String(cost), inline: true }
+            { name: "🏷️ Rank", value: jutsu.jutsuRank ?? "Sem rank", inline: true },
+            {
+              name: `${elementEmoji(jutsu.element) || "🌊"} Elemento`,
+              value: jutsu.element ?? "—",
+              inline: true
+            },
+            { name: "💠 Custo de Chakra", value: `${cost}`, inline: true }
           );
 
+        if (typeName) {
+          embed.addFields({ name: "📚 Tipo", value: typeName, inline: true });
+        }
         if (jutsu.requirements) {
-          embed.addFields({ name: "Requisitos", value: jutsu.requirements.slice(0, 1024) });
+          embed.addFields({ name: "📋 Requisitos", value: jutsu.requirements.slice(0, 1024) });
         }
         if (jutsu.imageUrl) {
-          embed.setThumbnail(jutsu.imageUrl);
+          embed.setImage(jutsu.imageUrl);
         }
+
+        embed.setFooter({ text: `Chave: ${jutsu.key} · .jutsu aprender ${jutsu.key}` });
 
         await ctx.reply({ embeds: [embed] });
       }
@@ -184,9 +278,17 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
           return;
         }
 
-        const lines = learned.map((l) => `**${l.jutsu.name}** \`[${l.jutsu.key}]\`${l.jutsu.jutsuRank ? ` — rank ${l.jutsu.jutsuRank}` : ""}`);
+        const sorted = sortByRank(learned.map((l) => l.jutsu));
+        const lines = sorted.map((j) => `${rankBadge(j.jutsuRank)} **${j.name}** \`[${j.key}]\``);
+
         await ctx.reply({
-          embeds: [new EmbedBuilder().setTitle(`Jutsus aprendidos — ${character.name}`).setDescription(lines.join("\n"))]
+          embeds: [
+            new EmbedBuilder()
+              .setColor(EMBED_COLOR)
+              .setTitle(`📖 Jutsus aprendidos — ${character.name}`)
+              .setDescription(lines.join("\n"))
+              .setFooter({ text: `${learned.length} jutsu(s) aprendido(s)` })
+          ]
         });
       }
     })
