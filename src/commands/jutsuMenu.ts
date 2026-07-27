@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
@@ -14,7 +15,17 @@ import {
 import { DomainError } from "../core/errors.js";
 import type { JutsuService } from "../modules/jutsus/JutsuService.js";
 import type { CommandServices } from "../types/command.js";
-import { elementEmoji, EMBED_COLOR, RANK_ORDER, rankBadge, rankColor, sortByRank, truncate, typeEmoji } from "./jutsuDisplay.js";
+import {
+  elementEmoji,
+  EMBED_COLOR,
+  fetchImageAttachment,
+  RANK_ORDER,
+  rankBadge,
+  rankColor,
+  sortByRank,
+  truncate,
+  typeEmoji
+} from "./jutsuDisplay.js";
 
 /**
  * Menu interativo de jutsus: categoria -> (rank, se a categoria tiver mais de 25) -> jutsu ->
@@ -31,6 +42,7 @@ const RANK_NONE = "none";
 export interface InteractiveView {
   embeds: EmbedBuilder[];
   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+  files?: AttachmentBuilder[];
 }
 
 type MenuInteraction = StringSelectMenuInteraction<"cached"> | ButtonInteraction<"cached">;
@@ -224,9 +236,6 @@ export async function buildJutsuDetailView(
   if (jutsu.requirements) {
     embed.addFields({ name: "📋 Requisitos", value: jutsu.requirements.slice(0, 1024) });
   }
-  if (jutsu.imageUrl) {
-    embed.setImage(jutsu.imageUrl);
-  }
   embed.setFooter({ text: `Chave: ${jutsu.key}` });
 
   const actionRow = row(
@@ -235,7 +244,19 @@ export async function buildJutsuDetailView(
     button("use", "✨ Usar", ButtonStyle.Primary, jutsu.key)
   );
 
-  return { embeds: [embed], components: [actionRow] };
+  const files: AttachmentBuilder[] = [];
+  if (jutsu.imageUrl) {
+    // Vários hosts de imagem cadastrados no site bloqueiam o crawler do Discord
+    // mesmo respondendo normal a qualquer outro cliente — baixa e reenvia como
+    // anexo em vez de linkar direto (ver fetchImageAttachment).
+    const image = await fetchImageAttachment(jutsu.imageUrl, jutsu.key);
+    if (image) {
+      embed.setImage(image.imageUrl);
+      files.push(image.attachment);
+    }
+  }
+
+  return { embeds: [embed], components: [actionRow], files };
 }
 
 // ─── Roteamento de interações ─────────────────────────────────────────────────
@@ -267,8 +288,11 @@ export async function handleJutsuMenuInteraction(interaction: MenuInteraction, s
     case "selectJutsu": {
       const [typeKey, rankFilter] = parts;
       if (!typeKey || !rankFilter || !selected) return;
+      // Buscar/reenviar a imagem pode passar da janela de 3s de ack de interação —
+      // adia a resposta antes de montar a view em vez de arriscar "This interaction failed".
+      await interaction.deferUpdate();
       const view = await buildJutsuDetailView(interaction.guild, services.jutsus, selected, typeKey, rankFilter);
-      await updateOrFallback(interaction, view);
+      await editOrFallback(interaction, view);
       return;
     }
 
@@ -317,6 +341,15 @@ async function updateOrFallback(interaction: MenuInteraction, view: InteractiveV
     return;
   }
   await interaction.update(view);
+}
+
+/** Mesma coisa que updateOrFallback, mas pra depois de um deferUpdate() (edita em vez de "update"). */
+async function editOrFallback(interaction: MenuInteraction, view: InteractiveView | null): Promise<void> {
+  if (!view) {
+    await interaction.editReply({ content: "Não encontrei mais esse conteúdo — pode ter sido removido.", embeds: [], components: [] });
+    return;
+  }
+  await interaction.editReply(view);
 }
 
 async function handleJutsuAction(

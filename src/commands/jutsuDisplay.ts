@@ -1,3 +1,5 @@
+import { AttachmentBuilder } from "discord.js";
+
 /**
  * Helpers visuais compartilhados entre o comando de texto (.jutsu) e o menu
  * interativo (JutsuMenu) — cor/emoji por rank, emoji por tipo/elemento, ordenação.
@@ -74,4 +76,55 @@ export function sortByRank<T extends { jutsuRank: string | null; name: string }>
 /** Trunca preservando limites de campo do Discord (label/description de SelectMenuOption = 100). */
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+export interface ImageAttachmentResult {
+  attachment: AttachmentBuilder;
+  /** Já no formato attachment://<arquivo> — pronto pra passar em embed.setImage(). */
+  imageUrl: string;
+}
+
+const IMAGE_FETCH_TIMEOUT_MS = 5000;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp"
+};
+
+/**
+ * Muitos hosts de imagem usados no cadastro do site (wikis de terceiros, CDNs
+ * obscuros) bloqueiam especificamente o crawler de embed do Discord mesmo
+ * respondendo normalmente a qualquer outro cliente — provável Cloudflare
+ * bloqueando o user-agent "Discordbot". Por isso o bot baixa a imagem aqui
+ * (com um cliente HTTP normal) e reenvia como anexo do próprio Discord, que
+ * nunca falha em renderizar o que ele mesmo hospedou.
+ */
+export async function fetchImageAttachment(url: string, baseName: string): Promise<ImageAttachmentResult | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS) });
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+    const extension = contentType ? EXTENSION_BY_CONTENT_TYPE[contentType] : undefined;
+    if (!extension) return null;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) return null;
+
+    const fileName = `${sanitizeFileName(baseName)}.${extension}`;
+    return {
+      attachment: new AttachmentBuilder(buffer, { name: fileName }),
+      imageUrl: `attachment://${fileName}`
+    };
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeFileName(base: string): string {
+  return base.replace(/[^a-z0-9_-]/gi, "-").slice(0, 60) || "jutsu";
 }

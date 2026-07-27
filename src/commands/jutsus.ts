@@ -7,7 +7,15 @@ import type { CharacterWithWorld } from "../modules/characters/CharacterService.
 import { JutsuRuleError } from "../modules/jutsus/JutsuService.js";
 import { buildCategoriesView } from "./jutsuMenu.js";
 import type { CommandServices } from "../types/command.js";
-import { elementEmoji, EMBED_COLOR, rankBadge, rankColor, sortByRank, typeEmoji } from "./jutsuDisplay.js";
+import {
+  elementEmoji,
+  EMBED_COLOR,
+  fetchImageAttachment,
+  rankBadge,
+  rankColor,
+  sortByRank,
+  typeEmoji
+} from "./jutsuDisplay.js";
 
 registerModule({
   key: "jutsus",
@@ -133,13 +141,15 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
         if (jutsu.requirements) {
           embed.addFields({ name: "📋 Requisitos", value: jutsu.requirements.slice(0, 1024) });
         }
-        if (jutsu.imageUrl) {
-          embed.setImage(jutsu.imageUrl);
-        }
 
         embed.setFooter({ text: `Chave: ${jutsu.key} · .jutsu aprender ${jutsu.key}` });
 
-        await ctx.reply({ embeds: [embed] });
+        const image = jutsu.imageUrl ? await fetchImageAttachment(jutsu.imageUrl, jutsu.key) : null;
+        if (image) {
+          embed.setImage(image.imageUrl);
+        }
+
+        await ctx.reply({ embeds: [embed], files: image ? [image.attachment] : undefined });
       }
     }),
 

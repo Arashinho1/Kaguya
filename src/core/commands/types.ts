@@ -1,5 +1,6 @@
 import type {
   ActionRowBuilder,
+  AttachmentBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
   Guild,
@@ -53,6 +54,7 @@ export type ReplyPayload =
       content?: string;
       embeds?: EmbedBuilder[];
       components?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+      files?: AttachmentBuilder[];
       /** Ignorado no modo prefixo (Discord só suporta ephemeral em interações). */
       ephemeral?: boolean;
     };

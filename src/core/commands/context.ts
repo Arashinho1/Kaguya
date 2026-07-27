@@ -24,7 +24,8 @@ export function buildContextFromMessage<TArgs extends readonly ArgDef[], TServic
       await message.reply({
         content: payload.content,
         embeds: payload.embeds,
-        components: payload.components
+        components: payload.components,
+        files: payload.files
       });
     }
   };
@@ -52,6 +53,7 @@ export function buildContextFromInteraction<TArgs extends readonly ArgDef[], TSe
               content: payload.content,
               embeds: payload.embeds,
               components: payload.components,
+              files: payload.files,
               ephemeral: payload.ephemeral
             };
 
