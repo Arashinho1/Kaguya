@@ -4,6 +4,7 @@ import { attributeAdminCommand, attributesCommand } from "./attributes.js";
 import { characterCommand } from "./characters.js";
 import { combatAdminCommand, duelCommand } from "./combat.js";
 import { economyAdminCommand, economyCommand } from "./economy.js";
+import { helpCommand } from "./help.js";
 import { jutsuAdminCommand, jutsuCommand } from "./jutsus.js";
 import { periciaAdminCommand, periciasCommand } from "./pericias.js";
 import { setupCommand } from "./setup.js";
@@ -14,6 +15,7 @@ export const commandRegistry = new CommandRegistry<CommandServices>();
 
 for (const command of [
   setupCommand,
+  helpCommand,
   attributesCommand,
   attributeAdminCommand,
   characterCommand,
