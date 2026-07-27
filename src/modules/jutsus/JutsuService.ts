@@ -36,12 +36,14 @@ export type MeditationIntervalUnit = "minute" | "hour";
 
 export interface MeditationConfig {
   ratePercent: number;
+  /** Ex: ratePercent=2, intervalAmount=5, intervalUnit="minute" -> "2% a cada 5 minutos". */
+  intervalAmount: number;
   intervalUnit: MeditationIntervalUnit;
 }
 
 /** Só usada até o servidor configurar a própria taxa — totalmente substituível. */
-const DEFAULT_MEDITATION_CONFIG: MeditationConfig = { ratePercent: 10, intervalUnit: "hour" };
-const INTERVAL_MS: Record<MeditationIntervalUnit, number> = { minute: 60_000, hour: 3_600_000 };
+const DEFAULT_MEDITATION_CONFIG: MeditationConfig = { ratePercent: 10, intervalAmount: 1, intervalUnit: "hour" };
+const INTERVAL_UNIT_MS: Record<MeditationIntervalUnit, number> = { minute: 60_000, hour: 3_600_000 };
 
 export interface MeditateResult {
   recovered: number;
@@ -344,9 +346,15 @@ export class JutsuService {
   public async getMeditationConfig(guild: Guild): Promise<MeditationConfig> {
     const raw = await this.guildConfig.getSetting(guild, MEDITATION_CONFIG_KEY);
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      const { ratePercent, intervalUnit } = raw as Record<string, unknown>;
-      if (typeof ratePercent === "number" && ratePercent > 0 && (intervalUnit === "minute" || intervalUnit === "hour")) {
-        return { ratePercent, intervalUnit };
+      const { ratePercent, intervalAmount, intervalUnit } = raw as Record<string, unknown>;
+      if (
+        typeof ratePercent === "number" &&
+        ratePercent > 0 &&
+        typeof intervalAmount === "number" &&
+        intervalAmount > 0 &&
+        (intervalUnit === "minute" || intervalUnit === "hour")
+      ) {
+        return { ratePercent, intervalAmount, intervalUnit };
       }
     }
     return DEFAULT_MEDITATION_CONFIG;
@@ -356,11 +364,14 @@ export class JutsuService {
     if (!(config.ratePercent > 0)) {
       throw new JutsuRuleError("O percentual precisa ser maior que 0.");
     }
+    if (!(config.intervalAmount > 0)) {
+      throw new JutsuRuleError("A quantidade do intervalo precisa ser maior que 0.");
+    }
 
     await this.guildConfig.setSetting(guild, actorId, {
       key: MEDITATION_CONFIG_KEY,
       label: "Regeneração de Chakra por meditação",
-      description: "Percentual do chakra total recuperado por minuto/hora ao usar .meditar.",
+      description: "Percentual do chakra total recuperado a cada X minutos/horas ao usar .meditar.",
       value: config as unknown as Prisma.InputJsonValue,
       valueType: "JSON",
       isPublic: true
@@ -392,7 +403,8 @@ export class JutsuService {
     const now = new Date();
     const since = progress.chakraSyncedAt ?? progress.updatedAt;
     const elapsedMs = Math.max(0, now.getTime() - since.getTime());
-    const elapsedUnits = elapsedMs / INTERVAL_MS[config.intervalUnit];
+    const intervalMs = config.intervalAmount * INTERVAL_UNIT_MS[config.intervalUnit];
+    const elapsedUnits = elapsedMs / intervalMs;
 
     const chakraBefore = progress.currentChakra;
     const recoveredRaw = Math.floor(maxChakra * (config.ratePercent / 100) * elapsedUnits);

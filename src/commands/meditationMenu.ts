@@ -26,7 +26,8 @@ import { BRAND_COLOR } from "./uiConstants.js";
 
 const ID_PREFIX = "meditationmenu";
 const RATE_FIELD = "percentual";
-const INTERVAL_FIELD = "intervalo";
+const INTERVAL_AMOUNT_FIELD = "quantidade";
+const INTERVAL_UNIT_FIELD = "intervalo";
 
 const INTERVAL_LABEL: Record<MeditationIntervalUnit, string> = { minute: "minuto", hour: "hora" };
 
@@ -50,7 +51,7 @@ export async function buildMeditationConfigView(guild: Guild, services: CommandS
     .setColor(BRAND_COLOR)
     .setTitle("🧘 Configuração de Meditação")
     .setDescription(
-      `Taxa atual: **${config.ratePercent}%** do chakra total por **${INTERVAL_LABEL[config.intervalUnit]}**.\n\n` +
+      `Taxa atual: **${config.ratePercent}%** do chakra total a cada **${config.intervalAmount} ${pluralizeInterval(config.intervalAmount, config.intervalUnit)}**.\n\n` +
         "Qualquer jogador pode usar `.meditar` a qualquer momento pra recuperar chakra gasto. " +
         "Pra restringir onde funciona, use `.setar`."
     );
@@ -63,19 +64,33 @@ export async function buildMeditationConfigView(guild: Guild, services: CommandS
   return { embeds: [embed], components: [row(editButton)] };
 }
 
+function pluralizeInterval(amount: number, unit: MeditationIntervalUnit): string {
+  const singular = INTERVAL_LABEL[unit];
+  return amount === 1 ? singular : `${singular}s`;
+}
+
 function buildEditModal(config: MeditationConfig): ModalBuilder {
   const rateInput = new TextInputBuilder()
     .setCustomId(RATE_FIELD)
     .setLabel("Percentual do chakra total")
-    .setPlaceholder("Ex: 10 (recupera 10% por intervalo)")
+    .setPlaceholder("Ex: 2 (recupera 2% a cada intervalo)")
     .setStyle(TextInputStyle.Short)
     .setValue(String(config.ratePercent))
     .setMaxLength(10)
     .setRequired(true);
 
-  const intervalInput = new TextInputBuilder()
-    .setCustomId(INTERVAL_FIELD)
-    .setLabel("Intervalo: minuto ou hora")
+  const intervalAmountInput = new TextInputBuilder()
+    .setCustomId(INTERVAL_AMOUNT_FIELD)
+    .setLabel("A cada quantas unidades")
+    .setPlaceholder("Ex: 5 (junto com minuto/hora abaixo = a cada 5 minutos)")
+    .setStyle(TextInputStyle.Short)
+    .setValue(String(config.intervalAmount))
+    .setMaxLength(10)
+    .setRequired(true);
+
+  const intervalUnitInput = new TextInputBuilder()
+    .setCustomId(INTERVAL_UNIT_FIELD)
+    .setLabel("Unidade: minuto ou hora")
     .setPlaceholder("minuto ou hora")
     .setStyle(TextInputStyle.Short)
     .setValue(INTERVAL_LABEL[config.intervalUnit])
@@ -87,7 +102,8 @@ function buildEditModal(config: MeditationConfig): ModalBuilder {
     .setTitle("Taxa de recuperação de chakra")
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(rateInput),
-      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(intervalInput)
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(intervalAmountInput),
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(intervalUnitInput)
     );
 }
 
@@ -136,7 +152,8 @@ export async function handleMeditationMenuInteraction(interaction: MenuInteracti
 
 async function handleEditModalSubmit(interaction: ModalSubmitInteraction<"cached">, services: CommandServices): Promise<void> {
   const rateRaw = interaction.fields.getTextInputValue(RATE_FIELD).trim().replace(",", ".");
-  const intervalRaw = interaction.fields.getTextInputValue(INTERVAL_FIELD);
+  const intervalAmountRaw = interaction.fields.getTextInputValue(INTERVAL_AMOUNT_FIELD).trim().replace(",", ".");
+  const intervalUnitRaw = interaction.fields.getTextInputValue(INTERVAL_UNIT_FIELD);
 
   await interaction.deferUpdate();
 
@@ -146,12 +163,21 @@ async function handleEditModalSubmit(interaction: ModalSubmitInteraction<"cached
       throw new DomainError("Percentual inválido — precisa ser um número maior que 0.");
     }
 
-    const intervalUnit = normalizeInterval(intervalRaw);
-    if (!intervalUnit) {
-      throw new DomainError("Intervalo inválido — digite `minuto` ou `hora`.");
+    const intervalAmount = Number.parseFloat(intervalAmountRaw);
+    if (Number.isNaN(intervalAmount) || intervalAmount <= 0) {
+      throw new DomainError("Quantidade do intervalo inválida — precisa ser um número maior que 0.");
     }
 
-    await services.jutsus.setMeditationConfig(interaction.guild, interaction.user.id, { ratePercent, intervalUnit });
+    const intervalUnit = normalizeInterval(intervalUnitRaw);
+    if (!intervalUnit) {
+      throw new DomainError("Unidade inválida — digite `minuto` ou `hora`.");
+    }
+
+    await services.jutsus.setMeditationConfig(interaction.guild, interaction.user.id, {
+      ratePercent,
+      intervalAmount,
+      intervalUnit
+    });
 
     const view = await buildMeditationConfigView(interaction.guild, services);
     await interaction.editReply(view);
