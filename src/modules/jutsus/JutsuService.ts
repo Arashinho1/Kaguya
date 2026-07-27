@@ -12,7 +12,12 @@ import {
   type JutsuType,
   type PrismaClient
 } from "../../generated/prisma/client.js";
-import { isChannelInScope } from "../../services/channelScope.js";
+import {
+  flattenScopeSelection,
+  isChannelInScope,
+  parseScopeSelection,
+  type ScopeSelection
+} from "../../services/channelScope.js";
 import type { CharacterService, CharacterWithWorld } from "../characters/CharacterService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 import type { PericiaService } from "../pericias/PericiaService.js";
@@ -408,71 +413,81 @@ export class JutsuService {
 
   // ─── Escopo por local (categoria/canal/fórum/thread) ───────────────────────
 
-  private async getScopeIds(guild: Guild, key: string): Promise<string[]> {
-    const value = await this.guildConfig.getSetting(guild, key);
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  private async getScopeSelection(guild: Guild, key: string): Promise<ScopeSelection> {
+    const raw = await this.guildConfig.getSetting(guild, key);
+    return parseScopeSelection(raw);
   }
 
-  private async setScopeIds(
+  /** Substitui só um grupo (canais, categorias, threads ou fóruns) — cada select do
+   * `.setar` mexe no próprio grupo sem apagar os outros três. */
+  private async setScopeGroup(
     guild: Guild,
     actorId: string,
     key: string,
     label: string,
     description: string,
-    channelIds: string[]
-  ): Promise<void> {
+    group: keyof ScopeSelection,
+    ids: string[]
+  ): Promise<ScopeSelection> {
+    const current = await this.getScopeSelection(guild, key);
+    const next: ScopeSelection = { ...current, [group]: ids };
+
     await this.guildConfig.setSetting(guild, actorId, {
       key,
       label,
       description,
-      value: channelIds as unknown as Prisma.InputJsonValue,
+      value: next as unknown as Prisma.InputJsonValue,
       valueType: "JSON",
       isPublic: false
     });
+
+    return next;
   }
 
-  public getNarrationScope(guild: Guild): Promise<string[]> {
-    return this.getScopeIds(guild, NARRATION_SCOPE_KEY);
+  public getNarrationScope(guild: Guild): Promise<ScopeSelection> {
+    return this.getScopeSelection(guild, NARRATION_SCOPE_KEY);
   }
 
-  public setNarrationScope(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
-    return this.setScopeIds(
+  public setNarrationScopeGroup(guild: Guild, actorId: string, group: keyof ScopeSelection, ids: string[]): Promise<ScopeSelection> {
+    return this.setScopeGroup(
       guild,
       actorId,
       NARRATION_SCOPE_KEY,
       "Onde o [jutsu] narrado funciona",
       "Categorias, canais, fóruns e threads onde a detecção de [jutsu] no chat funciona.",
-      channelIds
+      group,
+      ids
     );
   }
 
   /** Vazio = liberado em qualquer lugar (não muda o comportamento de quem nunca configurou). */
   public async isNarrationChannelAllowed(guild: Guild, channelId: string): Promise<boolean> {
-    const allowed = await this.getNarrationScope(guild);
+    const allowed = flattenScopeSelection(await this.getNarrationScope(guild));
     if (allowed.length === 0) return true;
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     return isChannelInScope(channel, allowed);
   }
 
-  public getMeditationScope(guild: Guild): Promise<string[]> {
-    return this.getScopeIds(guild, MEDITATION_SCOPE_KEY);
+  public getMeditationScope(guild: Guild): Promise<ScopeSelection> {
+    return this.getScopeSelection(guild, MEDITATION_SCOPE_KEY);
   }
 
-  public setMeditationScope(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
-    return this.setScopeIds(
+  public setMeditationScopeGroup(guild: Guild, actorId: string, group: keyof ScopeSelection, ids: string[]): Promise<ScopeSelection> {
+    return this.setScopeGroup(
       guild,
       actorId,
       MEDITATION_SCOPE_KEY,
       "Onde a meditação funciona",
       "Categorias, canais, fóruns e threads onde .meditar pode ser usado.",
-      channelIds
+      group,
+      ids
     );
   }
 
   /** Vazio = liberado em qualquer lugar (não muda o comportamento de quem nunca configurou). */
   public async isMeditationChannelAllowed(guild: Guild, channelId: string): Promise<boolean> {
-    const allowed = await this.getMeditationScope(guild);
+    const allowed = flattenScopeSelection(await this.getMeditationScope(guild));
     if (allowed.length === 0) return true;
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);

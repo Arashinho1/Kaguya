@@ -11,61 +11,69 @@ import {
 
 import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import type { MenuInteraction } from "../core/commands/menuRegistry.js";
+import { flattenScopeSelection, type ScopeSelection } from "../services/channelScope.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
 import { BRAND_COLOR } from "./uiConstants.js";
 
 /**
- * Menu de escopo por local (categoria/canal/fórum/thread), compartilhado por duelo,
- * meditação e a detecção narrada de [jutsu] — mesmo componente (ChannelSelectMenuBuilder
- * nativo do Discord), só troca qual serviço/chave de configuração ele lê e grava.
- * Selecionar uma categoria ou fórum libera automaticamente tudo dentro dela.
+ * `.setar`: hub único pra configurar onde Duelo, [jutsu] narrado e Meditar funcionam.
+ * Cada alvo tem 4 selects nativos do Discord (canal/categoria/thread/fórum) — o picker
+ * do próprio Discord já cuida de busca/rolagem entre muitas opções, sem precisarmos
+ * paginar nada manualmente. Escolher uma categoria ou fórum libera tudo dentro dela.
  */
 
-const ID_PREFIX = "scopemenu";
+const ID_PREFIX = "setar";
 const MAX_SELECTABLE = 25;
-
-const SCOPE_CHANNEL_TYPES = [
-  ChannelType.GuildText,
-  ChannelType.GuildAnnouncement,
-  ChannelType.GuildForum,
-  ChannelType.GuildCategory,
-  ChannelType.PublicThread,
-  ChannelType.PrivateThread,
-  ChannelType.AnnouncementThread
-] as const;
 
 export type ScopeTarget = "duelo" | "jutsu" | "meditar";
 
 interface ScopeMeta {
   title: string;
+  buttonLabel: string;
   /** true = lista vazia significa "liberado em qualquer lugar" (jutsu/meditar);
    * false = lista vazia significa "nada liberado ainda" (duelo, comportamento já existente). */
   emptyMeansAllowed: boolean;
-  getIds(services: CommandServices, guild: Guild): Promise<string[]>;
-  setIds(services: CommandServices, guild: Guild, actorId: string, ids: string[]): Promise<void>;
+  getSelection(services: CommandServices, guild: Guild): Promise<ScopeSelection>;
+  setGroup(
+    services: CommandServices,
+    guild: Guild,
+    actorId: string,
+    group: keyof ScopeSelection,
+    ids: string[]
+  ): Promise<ScopeSelection>;
 }
 
 const SCOPE_META: Record<ScopeTarget, ScopeMeta> = {
   duelo: {
-    title: "⚔️ Onde o Duelo funciona",
+    title: "⚔️ Duelo",
+    buttonLabel: "⚔️ Duelo",
     emptyMeansAllowed: false,
-    getIds: (services, guild) => services.combat.getAllowedChannelIds(guild),
-    setIds: (services, guild, actorId, ids) => services.combat.setAllowedChannelIds(guild, actorId, ids)
+    getSelection: (services, guild) => services.combat.getScopeSelection(guild),
+    setGroup: (services, guild, actorId, group, ids) => services.combat.setScopeGroup(guild, actorId, group, ids)
   },
   jutsu: {
-    title: "🥷 Onde o [jutsu] narrado funciona",
+    title: "🥷 [jutsu] narrado",
+    buttonLabel: "🥷 Jutsu Narrado",
     emptyMeansAllowed: true,
-    getIds: (services, guild) => services.jutsus.getNarrationScope(guild),
-    setIds: (services, guild, actorId, ids) => services.jutsus.setNarrationScope(guild, actorId, ids)
+    getSelection: (services, guild) => services.jutsus.getNarrationScope(guild),
+    setGroup: (services, guild, actorId, group, ids) => services.jutsus.setNarrationScopeGroup(guild, actorId, group, ids)
   },
   meditar: {
-    title: "🧘 Onde a Meditação funciona",
+    title: "🧘 Meditar",
+    buttonLabel: "🧘 Meditar",
     emptyMeansAllowed: true,
-    getIds: (services, guild) => services.jutsus.getMeditationScope(guild),
-    setIds: (services, guild, actorId, ids) => services.jutsus.setMeditationScope(guild, actorId, ids)
+    getSelection: (services, guild) => services.jutsus.getMeditationScope(guild),
+    setGroup: (services, guild, actorId, group, ids) => services.jutsus.setMeditationScopeGroup(guild, actorId, group, ids)
   }
+};
+
+const GROUP_BY_ACTION: Record<string, keyof ScopeSelection> = {
+  setChannels: "channels",
+  setCategories: "categories",
+  setThreads: "threads",
+  setForums: "forums"
 };
 
 export interface ScopeMenuView {
@@ -73,73 +81,107 @@ export interface ScopeMenuView {
   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
 }
 
-export interface BackButtonOptions {
-  customId: string;
-  label: string;
-}
-
 function buildId(action: string, ...parts: string[]): string {
   return buildCustomId(ID_PREFIX, action, ...parts);
-}
-
-function formatScopeList(ids: string[]): string {
-  return ids.map((id) => `<#${id}>`).join(", ");
-}
-
-export async function buildScopeView(
-  guild: Guild,
-  services: CommandServices,
-  target: ScopeTarget,
-  back?: BackButtonOptions
-): Promise<ScopeMenuView> {
-  const meta = SCOPE_META[target];
-  const ids = await meta.getIds(services, guild);
-
-  const statusLine =
-    ids.length === 0
-      ? meta.emptyMeansAllowed
-        ? "Sem restrição — funciona em **qualquer** canal, categoria ou thread do servidor."
-        : "⚠️ Nada liberado ainda — ninguém consegue usar até selecionar pelo menos um lugar abaixo."
-      : `Liberado em: ${formatScopeList(ids)}`;
-
-  const embed = new EmbedBuilder()
-    .setColor(BRAND_COLOR)
-    .setTitle(meta.title)
-    .setDescription(
-      `${statusLine}\n\n` +
-        "Selecionar uma **categoria** ou **fórum** libera automaticamente tudo dentro dela " +
-        "(canais, threads e posts). Deixe vazio pra remover a restrição."
-    );
-
-  const select = new ChannelSelectMenuBuilder()
-    .setCustomId(buildId("select", target))
-    .setPlaceholder("Escolher categorias, canais, fóruns ou threads...")
-    .setChannelTypes(...SCOPE_CHANNEL_TYPES)
-    .setMinValues(0)
-    .setMaxValues(MAX_SELECTABLE);
-
-  if (ids.length > 0) {
-    select.setDefaultChannels(...ids.slice(0, MAX_SELECTABLE));
-  }
-
-  const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [
-    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select)
-  ];
-
-  if (back) {
-    components.push(
-      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(back.customId).setLabel(back.label).setStyle(ButtonStyle.Secondary)
-      )
-    );
-  }
-
-  return { embeds: [embed], components };
 }
 
 function isScopeTarget(value: string | undefined): value is ScopeTarget {
   return value === "duelo" || value === "jutsu" || value === "meditar";
 }
+
+function formatIds(ids: string[]): string {
+  return ids.map((id) => `<#${id}>`).join(", ");
+}
+
+// ─── Views ───────────────────────────────────────────────────────────────────
+
+export function buildSetarHubView(): ScopeMenuView {
+  const embed = new EmbedBuilder()
+    .setColor(BRAND_COLOR)
+    .setTitle("📍 Configurar Escopo")
+    .setDescription(
+      "Escolha o que configurar. Em cada um você usa 4 seletores nativos do Discord " +
+        "(canal, categoria, thread, fórum) — escolher uma **categoria** ou **fórum** libera " +
+        "automaticamente tudo dentro dela."
+    );
+
+  const buttons = (Object.keys(SCOPE_META) as ScopeTarget[]).map((target) =>
+    new ButtonBuilder()
+      .setCustomId(buildId("openTarget", target))
+      .setLabel(SCOPE_META[target].buttonLabel)
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons)]
+  };
+}
+
+export async function buildSetarTargetView(
+  guild: Guild,
+  services: CommandServices,
+  target: ScopeTarget
+): Promise<ScopeMenuView> {
+  const meta = SCOPE_META[target];
+  const selection = await meta.getSelection(services, guild);
+  const isEmpty = flattenScopeSelection(selection).length === 0;
+
+  const groupLines = [
+    selection.channels.length > 0 ? `**Canais:** ${formatIds(selection.channels)}` : null,
+    selection.categories.length > 0 ? `**Categorias:** ${formatIds(selection.categories)}` : null,
+    selection.threads.length > 0 ? `**Threads:** ${formatIds(selection.threads)}` : null,
+    selection.forums.length > 0 ? `**Fóruns:** ${formatIds(selection.forums)}` : null
+  ].filter((line): line is string => line !== null);
+
+  const statusLine = isEmpty
+    ? meta.emptyMeansAllowed
+      ? "Sem restrição — funciona em **qualquer lugar** do servidor."
+      : "⚠️ Nada liberado ainda — ninguém consegue usar até selecionar pelo menos um lugar abaixo."
+    : groupLines.join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(BRAND_COLOR)
+    .setTitle(`📍 ${meta.title}`)
+    .setDescription(`${statusLine}\n\nDeixe um seletor vazio pra remover a restrição daquele grupo.`);
+
+  function selectRow(
+    action: string,
+    placeholder: string,
+    types: readonly ChannelType[],
+    current: string[]
+  ): ActionRowBuilder<MessageActionRowComponentBuilder> {
+    const select = new ChannelSelectMenuBuilder()
+      .setCustomId(buildId(action, target))
+      .setPlaceholder(placeholder)
+      .setChannelTypes(...types)
+      .setMinValues(0)
+      .setMaxValues(MAX_SELECTABLE);
+    if (current.length > 0) {
+      select.setDefaultChannels(...current.slice(0, MAX_SELECTABLE));
+    }
+    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
+  }
+
+  const components = [
+    selectRow("setChannels", "Canais...", [ChannelType.GuildText, ChannelType.GuildAnnouncement], selection.channels),
+    selectRow("setCategories", "Categorias...", [ChannelType.GuildCategory], selection.categories),
+    selectRow(
+      "setThreads",
+      "Threads...",
+      [ChannelType.PublicThread, ChannelType.PrivateThread, ChannelType.AnnouncementThread],
+      selection.threads
+    ),
+    selectRow("setForums", "Fóruns...", [ChannelType.GuildForum], selection.forums),
+    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(buildId("backToHub")).setLabel("⬅️ Voltar").setStyle(ButtonStyle.Secondary)
+    )
+  ];
+
+  return { embeds: [embed], components };
+}
+
+// ─── Roteamento de interações ─────────────────────────────────────────────────
 
 async function requireAdminInteraction(interaction: MenuInteraction, services: CommandServices): Promise<boolean> {
   const isAdmin = await canUseCommandAccess("admin", interaction.member, interaction.client, services.guildConfig);
@@ -152,28 +194,36 @@ async function requireAdminInteraction(interaction: MenuInteraction, services: C
   return isAdmin;
 }
 
-export async function handleScopeMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
+export async function handleSetarMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
   if (!(await requireAdminInteraction(interaction, services))) {
     return;
   }
 
-  if (!interaction.isChannelSelectMenu()) {
+  const { action, parts } = parseCustomId(interaction.customId);
+  const target = parts[0];
+
+  if (interaction.isButton()) {
+    if (action === "openTarget" && isScopeTarget(target)) {
+      await interaction.update(await buildSetarTargetView(interaction.guild, services, target));
+      return;
+    }
+    if (action === "backToHub") {
+      await interaction.update(buildSetarHubView());
+      return;
+    }
     return;
   }
 
-  const { action, parts } = parseCustomId(interaction.customId);
-  if (action !== "select") return;
+  if (interaction.isChannelSelectMenu()) {
+    const group = GROUP_BY_ACTION[action];
+    if (!group || !isScopeTarget(target)) return;
 
-  const target = parts[0];
-  if (!isScopeTarget(target)) return;
+    await interaction.deferUpdate();
+    await SCOPE_META[target].setGroup(services, interaction.guild, interaction.user.id, group, interaction.values);
 
-  await interaction.deferUpdate();
-
-  const meta = SCOPE_META[target];
-  await meta.setIds(services, interaction.guild, interaction.user.id, interaction.values);
-
-  const view = await buildScopeView(interaction.guild, services, target);
-  await interaction.editReply(view);
+    const view = await buildSetarTargetView(interaction.guild, services, target);
+    await interaction.editReply(view);
+  }
 }
 
-menuRegistry.register({ prefix: ID_PREFIX, handle: handleScopeMenuInteraction });
+menuRegistry.register({ prefix: ID_PREFIX, handle: handleSetarMenuInteraction });

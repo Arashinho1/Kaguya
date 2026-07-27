@@ -19,7 +19,6 @@ import type { MeditationConfig, MeditationIntervalUnit } from "../modules/jutsus
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
-import { buildScopeView } from "./scopeMenu.js";
 import { BRAND_COLOR } from "./uiConstants.js";
 
 /** Menu de config da meditação (`.meditar config`) — mesmo padrão dos outros menus de
@@ -52,8 +51,8 @@ export async function buildMeditationConfigView(guild: Guild, services: CommandS
     .setTitle("🧘 Configuração de Meditação")
     .setDescription(
       `Taxa atual: **${config.ratePercent}%** do chakra total por **${INTERVAL_LABEL[config.intervalUnit]}**.\n\n` +
-        "Qualquer jogador pode usar `.meditar` a qualquer momento pra recuperar chakra gasto — " +
-        "não precisa estar em duelo nem em nenhum lugar específico."
+        "Qualquer jogador pode usar `.meditar` a qualquer momento pra recuperar chakra gasto. " +
+        "Pra restringir onde funciona, use `.setar`."
     );
 
   const editButton = new ButtonBuilder()
@@ -61,12 +60,7 @@ export async function buildMeditationConfigView(guild: Guild, services: CommandS
     .setLabel("✏️ Editar taxa")
     .setStyle(ButtonStyle.Primary);
 
-  const scopeButton = new ButtonBuilder()
-    .setCustomId(buildId("openScope"))
-    .setLabel("📍 Onde funciona")
-    .setStyle(ButtonStyle.Secondary);
-
-  return { embeds: [embed], components: [row(editButton, scopeButton)] };
+  return { embeds: [embed], components: [row(editButton)] };
 }
 
 function buildEditModal(config: MeditationConfig): ModalBuilder {
@@ -137,21 +131,6 @@ export async function handleMeditationMenuInteraction(interaction: MenuInteracti
   if (action === "openEditModal") {
     const config = await services.jutsus.getMeditationConfig(interaction.guild);
     await interaction.showModal(buildEditModal(config));
-    return;
-  }
-
-  if (action === "openScope") {
-    const view = await buildScopeView(interaction.guild, services, "meditar", {
-      customId: buildId("backToConfig"),
-      label: "⬅️ Voltar"
-    });
-    await interaction.update(view);
-    return;
-  }
-
-  if (action === "backToConfig") {
-    const view = await buildMeditationConfigView(interaction.guild, services);
-    await interaction.update(view);
   }
 }
 

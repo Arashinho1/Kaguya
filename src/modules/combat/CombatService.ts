@@ -2,14 +2,19 @@ import type { Guild } from "discord.js";
 
 import { DomainError } from "../../core/errors.js";
 import type { DuelEncounter, Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import { isChannelInScope } from "../../services/channelScope.js";
+import {
+  flattenScopeSelection,
+  isChannelInScope,
+  parseScopeSelection,
+  type ScopeSelection
+} from "../../services/channelScope.js";
 import type { CharacterWithWorld } from "../characters/CharacterService.js";
 import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
 
 export class CombatRuleError extends DomainError {}
 
-const ALLOWED_CHANNELS_KEY = "combatChannelIds";
+const SCOPE_KEY = "combatScope";
 
 export class CombatService {
   public constructor(
@@ -18,11 +23,11 @@ export class CombatService {
     private readonly economy: EconomyService
   ) {}
 
-  // ─── Canais/categorias/fóruns permitidos ────────────────────────────────
+  // ─── Onde o duelo funciona (categoria/canal/fórum/thread) ───────────────
 
-  public async getAllowedChannelIds(guild: Guild): Promise<string[]> {
-    const value = await this.guildConfig.getSetting(guild, ALLOWED_CHANNELS_KEY);
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  public async getScopeSelection(guild: Guild): Promise<ScopeSelection> {
+    const raw = await this.guildConfig.getSetting(guild, SCOPE_KEY);
+    return parseScopeSelection(raw);
   }
 
   /**
@@ -31,40 +36,34 @@ export class CombatService {
    * fórum liberado libera automaticamente tudo dentro (canais, threads/posts).
    */
   public async isChannelAllowed(guild: Guild, channelId: string): Promise<boolean> {
-    const allowed = await this.getAllowedChannelIds(guild);
+    const allowed = flattenScopeSelection(await this.getScopeSelection(guild));
     if (allowed.length === 0) return false;
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     return isChannelInScope(channel, allowed);
   }
 
-  public async addAllowedChannel(guild: Guild, actorId: string, channelId: string): Promise<string[]> {
-    const current = await this.getAllowedChannelIds(guild);
-    const next = current.includes(channelId) ? current : [...current, channelId];
-    await this.saveAllowedChannels(guild, actorId, next);
-    return next;
-  }
+  /** Substitui só um grupo (canais, categorias, threads ou fóruns) — usado pelo `.setar`,
+   * onde cada select mexe no próprio grupo sem apagar os outros três. */
+  public async setScopeGroup(
+    guild: Guild,
+    actorId: string,
+    group: keyof ScopeSelection,
+    ids: string[]
+  ): Promise<ScopeSelection> {
+    const current = await this.getScopeSelection(guild);
+    const next: ScopeSelection = { ...current, [group]: ids };
 
-  public async removeAllowedChannel(guild: Guild, actorId: string, channelId: string): Promise<string[]> {
-    const next = (await this.getAllowedChannelIds(guild)).filter((id) => id !== channelId);
-    await this.saveAllowedChannels(guild, actorId, next);
-    return next;
-  }
-
-  /** Substitui a lista inteira — usado pelo select de canal/categoria/fórum (`.combateadmin escopo`). */
-  public async setAllowedChannelIds(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
-    await this.saveAllowedChannels(guild, actorId, channelIds);
-  }
-
-  private async saveAllowedChannels(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
     await this.guildConfig.setSetting(guild, actorId, {
-      key: ALLOWED_CHANNELS_KEY,
+      key: SCOPE_KEY,
       label: "Onde o duelo funciona",
       description: "Categorias, canais, fóruns e threads onde .duelo pode ser iniciado.",
-      value: channelIds as unknown as Prisma.InputJsonValue,
+      value: next as unknown as Prisma.InputJsonValue,
       valueType: "JSON",
       isPublic: false
     });
+
+    return next;
   }
 
   // ─── Duelos ──────────────────────────────────────────────────────────────

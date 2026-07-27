@@ -6,7 +6,6 @@ import { registerModule } from "../core/modules/registry.js";
 import type { CharacterWithWorld } from "../modules/characters/CharacterService.js";
 import { JutsuRuleError } from "../modules/jutsus/JutsuService.js";
 import { buildCategoriesView } from "./jutsuMenu.js";
-import { buildScopeView } from "./scopeMenu.js";
 import type { CommandServices } from "../types/command.js";
 import {
   elementEmoji,
@@ -246,16 +245,6 @@ export const jutsuAdminCommand = defineCommandGroup<CommandServices>({
   access: "admin",
   module: "jutsus",
   subcommands: [
-    defineSubcommand<typeof sincronizarArgs, CommandServices>({
-      name: "escopo",
-      description: "Menu pra escolher categorias/canais/fóruns/threads onde o [jutsu] narrado funciona.",
-      args: sincronizarArgs,
-      async handler(ctx) {
-        const view = await buildScopeView(ctx.guild, ctx.services, "jutsu");
-        await ctx.reply(view);
-      }
-    }),
-
     defineSubcommand<typeof sincronizarArgs, CommandServices>({
       name: "sincronizar",
       description: "Puxa o catálogo atualizado do site Mundo Ninja.",

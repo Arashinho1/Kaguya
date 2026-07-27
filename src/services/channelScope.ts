@@ -31,3 +31,43 @@ export function isChannelInScope(channel: GuildBasedChannel | null, allowedIds: 
   const ids = collectScopeAncestorIds(channel);
   return ids.some((id) => allowedIds.includes(id));
 }
+
+/**
+ * Seleção guardada como 4 grupos (um por select de tipo no `.setar`) em vez de uma lista
+ * só — cada select só mexe no próprio grupo, sem apagar o que já foi escolhido nos outros.
+ * A resolução de escopo (isChannelInScope) não precisa saber de qual grupo cada ID veio;
+ * só usa a lista achatada.
+ */
+export interface ScopeSelection {
+  channels: string[];
+  categories: string[];
+  threads: string[];
+  forums: string[];
+}
+
+export function emptyScopeSelection(): ScopeSelection {
+  return { channels: [], categories: [], threads: [], forums: [] };
+}
+
+export function flattenScopeSelection(selection: ScopeSelection): string[] {
+  return [...selection.channels, ...selection.categories, ...selection.threads, ...selection.forums];
+}
+
+export function isScopeSelectionEmpty(selection: ScopeSelection): boolean {
+  return flattenScopeSelection(selection).length === 0;
+}
+
+function toIdArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+}
+
+export function parseScopeSelection(raw: unknown): ScopeSelection {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return emptyScopeSelection();
+  const obj = raw as Record<string, unknown>;
+  return {
+    channels: toIdArray(obj.channels),
+    categories: toIdArray(obj.categories),
+    threads: toIdArray(obj.threads),
+    forums: toIdArray(obj.forums)
+  };
+}

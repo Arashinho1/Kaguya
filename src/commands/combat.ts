@@ -4,7 +4,6 @@ import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/comma
 import { registerModule } from "../core/modules/registry.js";
 import type { CharacterWithWorld } from "../modules/characters/CharacterService.js";
 import { CombatRuleError } from "../modules/combat/CombatService.js";
-import { buildScopeView } from "./scopeMenu.js";
 import type { CommandServices } from "../types/command.js";
 
 registerModule({
@@ -135,66 +134,16 @@ async function requireBothCharacters(ctx: {
   return [challenger, opponent] as const;
 }
 
-const canalArgs = [
-  { name: "canal", type: "channel", description: "Canal onde .duelo pode ser usado." }
-] as const satisfies readonly ArgDef[];
-
-const canaisArgs = [] as const satisfies readonly ArgDef[];
-
 const finalizarArgs = [
   { name: "vencedor", type: "user", description: "Jogador vencedor do duelo ativo neste canal." }
 ] as const satisfies readonly ArgDef[];
 
 export const combatAdminCommand = defineCommandGroup<CommandServices>({
   name: "combateadmin",
-  description: "Configura canais de duelo e finaliza duelos ativos.",
+  description: "Finaliza duelos ativos (o escopo de onde o duelo funciona agora é em .setar).",
   access: "admin",
   module: "combat",
   subcommands: [
-    defineSubcommand<typeof canaisArgs, CommandServices>({
-      name: "escopo",
-      description: "Menu pra escolher categorias/canais/fóruns/threads onde .duelo funciona.",
-      args: canaisArgs,
-      async handler(ctx) {
-        const view = await buildScopeView(ctx.guild, ctx.services, "duelo");
-        await ctx.reply(view);
-      }
-    }),
-
-    defineSubcommand<typeof canalArgs, CommandServices>({
-      name: "canaladicionar",
-      description: "Permite duelos neste canal.",
-      args: canalArgs,
-      async handler(ctx) {
-        await ctx.services.combat.addAllowedChannel(ctx.guild, ctx.user.id, ctx.args.canal.id);
-        await ctx.reply(`<#${ctx.args.canal.id}> agora permite \`.duelo\`.`);
-      }
-    }),
-
-    defineSubcommand<typeof canalArgs, CommandServices>({
-      name: "canalremover",
-      description: "Remove um canal da lista de duelos permitidos.",
-      args: canalArgs,
-      async handler(ctx) {
-        await ctx.services.combat.removeAllowedChannel(ctx.guild, ctx.user.id, ctx.args.canal.id);
-        await ctx.reply(`<#${ctx.args.canal.id}> não permite mais \`.duelo\`.`);
-      }
-    }),
-
-    defineSubcommand<typeof canaisArgs, CommandServices>({
-      name: "canais",
-      description: "Lista os canais onde .duelo é permitido.",
-      args: canaisArgs,
-      async handler(ctx) {
-        const channelIds = await ctx.services.combat.getAllowedChannelIds(ctx.guild);
-        await ctx.reply(
-          channelIds.length > 0
-            ? channelIds.map((id) => `<#${id}>`).join(", ")
-            : "Nenhum canal liberado para duelo ainda."
-        );
-      }
-    }),
-
     defineSubcommand<typeof finalizarArgs, CommandServices>({
       name: "finalizar",
       description: "Finaliza o duelo ativo neste canal, declarando o vencedor.",
