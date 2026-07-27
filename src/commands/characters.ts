@@ -2,6 +2,7 @@ import { Message } from "discord.js";
 
 import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
 import { registerModule } from "../core/modules/registry.js";
+import { ATTRIBUTE_CATEGORIES } from "../modules/attributes/AttributeService.js";
 import { buildCreatePromptView, buildFichaView } from "./fichaMenu.js";
 import { CharacterRuleError, type LinkKind } from "../modules/characters/CharacterService.js";
 import type { CommandServices } from "../types/command.js";
@@ -28,6 +29,13 @@ const vincularArgs = [
 ] as const satisfies readonly ArgDef[];
 
 const fundoArgs = [
+  {
+    name: "categoria",
+    type: "string",
+    description: "Físico ou mental (padrão: fundo genérico da ficha, usado quando a categoria não tem um próprio).",
+    choices: ATTRIBUTE_CATEGORIES,
+    required: false
+  },
   { name: "url", type: "text", description: "Link da imagem (ou anexe uma imagem junto com o comando).", required: false }
 ] as const satisfies readonly ArgDef[];
 
@@ -89,7 +97,7 @@ export const characterCommand = defineCommandGroup<CommandServices>({
 
     defineSubcommand<typeof fundoArgs, CommandServices>({
       name: "fundo",
-      description: "Define o fundo do seu card de ficha (link de imagem ou anexo).",
+      description: "Define o fundo do seu card de ficha (link de imagem ou anexo) — geral ou de uma categoria.",
       args: fundoArgs,
       async handler(ctx) {
         const character = await ctx.services.characters.getActiveCharacter(ctx.guild, ctx.user.id);
@@ -98,19 +106,26 @@ export const characterCommand = defineCommandGroup<CommandServices>({
           return;
         }
 
+        // Modais (usados pelo menu 🎨 Editar Visual) não suportam anexar arquivo — só dá pra
+        // anexar imagem de verdade por aqui, no modo texto, com a imagem junto da mensagem.
         const attachmentUrl = ctx.source instanceof Message ? ctx.source.attachments.first()?.url : undefined;
         const url = attachmentUrl ?? ctx.args.url;
 
         if (!url) {
           throw new CharacterRuleError(
-            "Informe um link de imagem ou anexe uma imagem junto com o comando. Pelo menu, use o botão 🖼️ Alterar fundo."
+            "Informe um link de imagem ou anexe uma imagem junto com o comando. Pelo menu, use o botão 🎨 Editar Visual."
           );
         }
         if (!/^https?:\/\//i.test(url)) {
           throw new CharacterRuleError("Isso não parece um link válido (precisa começar com http:// ou https://).");
         }
 
-        await ctx.services.characters.setBackground(ctx.guild, character, url);
+        if (ctx.args.categoria) {
+          await ctx.services.characters.setCategoryImage(ctx.guild, character, ctx.args.categoria, url);
+        } else {
+          await ctx.services.characters.setBackground(ctx.guild, character, url);
+        }
+
         await ctx.reply("Fundo atualizado! Use `.ficha` para ver como ficou.");
       }
     })

@@ -310,12 +310,15 @@ export async function buildVisualEditorView(
       ? `🎨 Cor sólida \`${style.backgroundColor}\``
       : "Padrão (sem customização)";
 
+  const fundoCommand = target === DEFAULT_STYLE_TARGET ? ".ficha fundo" : `.ficha fundo ${target}`;
+
   const embed = new EmbedBuilder()
     .setColor(BRAND_COLOR)
     .setTitle(`🎨 Editar Visual — ${targetDisplayName(target)}`)
     .setDescription(
       [
         "O preview abaixo atualiza a cada mudança. Imagem e cor sólida são alternativas — escolher uma limpa a outra.",
+        `-# Discord não deixa anexar arquivo num formulário como esse — pra usar uma imagem do seu computador (em vez de um link), rode \`${fundoCommand}\` com a imagem anexada na mensagem.`,
         "",
         `**Fundo:** ${backgroundLine}`,
         `**Destaque (borda/chakra/barras):** ${style.accent ? `\`${style.accent}\`` : "Padrão da categoria"}`

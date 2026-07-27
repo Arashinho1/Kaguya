@@ -199,7 +199,7 @@ export async function buildEntityListView(
         return new StringSelectMenuOptionBuilder()
           .setLabel(`${entity.isActive ? "🟢" : "🔴"} ${truncate(label, 98)}`.slice(0, 100))
           .setValue(identifierOf(type, entity))
-          .setDescription(truncate(entity.description ?? "Sem descrição.", 100));
+          .setDescription(truncate(entity.description || "Sem descrição.", 100));
       })
     );
 
@@ -489,7 +489,10 @@ async function handleEditModalSubmit(
   encodedIdentifier: string
 ): Promise<void> {
   const identifier = decodeURIComponent(encodedIdentifier);
-  const description = interaction.fields.getTextInputValue("descricao").trim();
+  // "" quebraria StringSelectMenuOptionBuilder.setDescription() depois (exige length >= 1) —
+  // trata campo vazio como "não mexer" em vez de gravar string vazia (updateX ignora undefined).
+  const descriptionInput = interaction.fields.getTextInputValue("descricao").trim();
+  const description = descriptionInput.length > 0 ? descriptionInput : undefined;
   const bonuses = parseBonuses(interaction.fields.getTextInputValue("bonus").trim());
 
   await interaction.deferUpdate();
