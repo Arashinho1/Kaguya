@@ -21,28 +21,33 @@ import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import { DomainError } from "../core/errors.js";
 import type { MenuInteraction } from "../core/commands/menuRegistry.js";
 import { ATTRIBUTE_CATEGORIES } from "../modules/attributes/AttributeService.js";
-import type { CharacterAttributeView, CharacterWithWorld, LinkKind } from "../modules/characters/CharacterService.js";
+import {
+  DEFAULT_STYLE_TARGET,
+  type CardStyle,
+  type CharacterAttributeView,
+  type CharacterWithWorld,
+  type LinkKind
+} from "../modules/characters/CharacterService.js";
 import { renderFichaCard } from "../services/cardGenerator.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
 import { BRAND_COLOR, truncate } from "./uiConstants.js";
 
 const CARD_FILENAME_BASE = "ficha";
-const BACKGROUND_FIELD_ID = "url";
-/** Parte de customId usada quando o fundo alterado é o genérico (sem categoria ativa). */
-const NO_CATEGORY = "-";
+const IMAGE_FIELD_ID = "url";
+const COLOR_FIELD_ID = "hex";
 
 interface CategoryTheme {
   /** Desenhado no card (canvas), sem emoji — a fonte bundlada não tem glifos de emoji. */
   label: string;
-  /** Cor de destaque do card; omitido cai no laranja padrão do cardGenerator. */
+  /** Cor de destaque padrão do card; substituível pelo editor visual (accent customizado). */
   accent?: string;
   /** Label do botão de troca (aqui pode ter emoji — é renderizado pelo próprio Discord). */
   switchLabel: string;
 }
 
-/** Cada categoria tem uma identidade visual própria — pedido explícito pra não ficarem
- * "iguais". Categoria fora dessas duas conhecidas cai num tema neutro genérico. */
+/** Cada categoria tem uma identidade visual própria por padrão — pedido explícito pra não
+ * ficarem "iguais". Categoria fora dessas duas conhecidas cai num tema neutro genérico. */
 const CATEGORY_THEME: Record<string, CategoryTheme> = {
   fisico: { label: "ATRIBUTOS FÍSICOS", accent: "#ff5a36", switchLabel: "💪 Físico" },
   mental: { label: "ATRIBUTOS MENTAIS", accent: "#7c6cff", switchLabel: "🧠 Mental" }
@@ -50,6 +55,12 @@ const CATEGORY_THEME: Record<string, CategoryTheme> = {
 
 function categoryTheme(category: string): CategoryTheme {
   return CATEGORY_THEME[category] ?? { label: `ATRIBUTOS (${category.toUpperCase()})`, switchLabel: category };
+}
+
+/** Nome amigável de um alvo de estilo (categoria ou o "_default" genérico), sem emoji. */
+function targetDisplayName(target: string): string {
+  if (target === DEFAULT_STYLE_TARGET) return "Padrão";
+  return categoryTheme(target).switchLabel.replace(/^\S+\s/, "");
 }
 
 /** Preserva a ordem de primeira aparição das categorias (attributes já vêm ordenados por sortOrder/nome). */
@@ -100,6 +111,10 @@ function row(...components: MessageActionRowComponentBuilder[]): ActionRowBuilde
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(components);
 }
 
+function button(action: string, label: string, style: ButtonStyle, ...parts: string[]): ButtonBuilder {
+  return new ButtonBuilder().setCustomId(buildId(action, ...parts)).setLabel(label).setStyle(style);
+}
+
 // ─── Views ───────────────────────────────────────────────────────────────────
 
 export function buildCreatePromptView(): FichaView {
@@ -125,13 +140,23 @@ async function resolveAvatarUrl(guild: Guild, userId: string): Promise<string> {
   return user?.displayAvatarURL({ extension: "png", size: 256 }) ?? guild.client.user.displayAvatarURL();
 }
 
-export async function buildFichaView(
+interface ActiveCard {
+  attachment: AttachmentBuilder;
+  filename: string;
+  theme: CategoryTheme | null;
+  style: CardStyle;
+  characterName: string;
+}
+
+/** Resolve a categoria ativa (primeira com atributos, se não pedida) e renderiza o card
+ * dela — compartilhado entre a view normal da ficha e o editor visual, que precisam do
+ * mesmo card, só que com barras de ação diferentes por baixo. */
+async function renderActiveCard(
   guild: Guild,
   character: CharacterWithWorld,
   services: CommandServices,
-  isOwner: boolean,
-  activeCategory?: string | null
-): Promise<FichaView> {
+  activeCategory: string | null | undefined
+): Promise<{ card: ActiveCard; resolvedCategory: string | null; orderedCategories: string[] }> {
   const view = await services.characters.getCharacterView(guild, character);
 
   const [avatarUrl, progress] = await Promise.all([
@@ -139,9 +164,6 @@ export async function buildFichaView(
     services.training.getOrCreateProgress(guild, character)
   ]);
 
-  // Um card por vez (não mais os dois juntos numa mensagem só) — um botão troca de
-  // categoria. Sem categoria pedida (ou pedida mas vazia), cai na primeira categoria
-  // com atributos; sem nenhum atributo cadastrado, vira o card genérico de sempre.
   const groups = groupAttributesByCategory(view.attributes);
   const orderedCategories = orderCategories(groups);
   const resolvedCategory =
@@ -149,13 +171,15 @@ export async function buildFichaView(
   const theme = resolvedCategory ? categoryTheme(resolvedCategory) : null;
   const cardAttributes = resolvedCategory ? (groups.get(resolvedCategory) ?? []) : [];
 
+  const target = resolvedCategory ?? DEFAULT_STYLE_TARGET;
+  const style = services.characters.getCardStyle(character, target);
   const filename = `${CARD_FILENAME_BASE}${resolvedCategory ? `-${resolvedCategory}` : ""}.png`;
-  const backgroundUrl = services.characters.getBackgroundForCategory(character, resolvedCategory);
 
   const cardBuffer = await renderFichaCard({
     characterName: view.character.name,
     avatarUrl,
-    backgroundUrl,
+    backgroundUrl: style.backgroundUrl,
+    backgroundColor: style.backgroundColor,
     rankName: view.character.rank?.name ?? null,
     villageName: view.character.village?.name ?? null,
     clanName: view.character.clan?.name ?? null,
@@ -163,13 +187,34 @@ export async function buildFichaView(
     trainingPoints: progress.trainingPoints,
     attributes: cardAttributes.map((attr) => ({ name: attr.name, value: attr.value, maxValue: attr.maxValue })),
     sectionLabel: theme?.label ?? null,
-    accent: theme?.accent
+    accent: style.accent ?? theme?.accent
   });
 
   const attachment = new AttachmentBuilder(cardBuffer, { name: filename });
+
+  return {
+    card: { attachment, filename, theme, style, characterName: view.character.name },
+    resolvedCategory,
+    orderedCategories
+  };
+}
+
+export async function buildFichaView(
+  guild: Guild,
+  character: CharacterWithWorld,
+  services: CommandServices,
+  isOwner: boolean,
+  activeCategory?: string | null
+): Promise<FichaView> {
+  const {
+    card: { attachment, filename, characterName },
+    resolvedCategory,
+    orderedCategories
+  } = await renderActiveCard(guild, character, services, activeCategory);
+
   const embed = new EmbedBuilder()
     .setColor(BRAND_COLOR)
-    .setTitle(`📜 ${view.character.name}`)
+    .setTitle(`📜 ${characterName}`)
     .setImage(`attachment://${filename}`);
 
   const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
@@ -196,11 +241,13 @@ export async function buildFichaView(
       services.world.listVillages(guild)
     ]);
 
+    const target = resolvedCategory ?? DEFAULT_STYLE_TARGET;
+
     if (clans.length > 0) {
       components.push(
         row(
           new StringSelectMenuBuilder()
-            .setCustomId(buildId("selectClan", resolvedCategory ?? NO_CATEGORY))
+            .setCustomId(buildId("selectClan", target))
             .setPlaceholder("Escolher clã...")
             .addOptions(
               clans.slice(0, MAX_OPTIONS).map((clan) =>
@@ -208,7 +255,7 @@ export async function buildFichaView(
                   .setLabel(truncate(clan.name, 100))
                   .setValue(clan.name)
                   .setDescription(truncate(clan.description ?? "Sem descrição.", 100))
-                  .setDefault(clan.id === view.character.clanId)
+                  .setDefault(clan.id === character.clanId)
               )
             )
         )
@@ -219,7 +266,7 @@ export async function buildFichaView(
       components.push(
         row(
           new StringSelectMenuBuilder()
-            .setCustomId(buildId("selectVillage", resolvedCategory ?? NO_CATEGORY))
+            .setCustomId(buildId("selectVillage", target))
             .setPlaceholder("Escolher vila...")
             .addOptions(
               villages.slice(0, MAX_OPTIONS).map((village) =>
@@ -227,7 +274,7 @@ export async function buildFichaView(
                   .setLabel(truncate(village.name, 100))
                   .setValue(village.name)
                   .setDescription(truncate(village.description ?? "Sem descrição.", 100))
-                  .setDefault(village.id === view.character.villageId)
+                  .setDefault(village.id === character.villageId)
               )
             )
         )
@@ -237,12 +284,56 @@ export async function buildFichaView(
     components.push(
       row(
         new ButtonBuilder()
-          .setCustomId(buildId("openBackgroundModal", resolvedCategory ?? NO_CATEGORY))
-          .setLabel(`🖼️ Alterar fundo${theme ? ` (${theme.switchLabel.replace(/^\S+\s/, "")})` : ""}`)
+          .setCustomId(buildId("openVisualEditor", target))
+          .setLabel(`🎨 Editar Visual (${targetDisplayName(target)})`)
           .setStyle(ButtonStyle.Secondary)
       )
     );
   }
+
+  return { embeds: [embed], components, files: [attachment] };
+}
+
+export async function buildVisualEditorView(
+  guild: Guild,
+  character: CharacterWithWorld,
+  services: CommandServices,
+  target: string
+): Promise<FichaView> {
+  const {
+    card: { attachment, filename, style }
+  } = await renderActiveCard(guild, character, services, target === DEFAULT_STYLE_TARGET ? null : target);
+
+  const backgroundLine = style.backgroundUrl
+    ? "🖼️ Imagem"
+    : style.backgroundColor
+      ? `🎨 Cor sólida \`${style.backgroundColor}\``
+      : "Padrão (sem customização)";
+
+  const embed = new EmbedBuilder()
+    .setColor(BRAND_COLOR)
+    .setTitle(`🎨 Editar Visual — ${targetDisplayName(target)}`)
+    .setDescription(
+      [
+        "O preview abaixo atualiza a cada mudança. Imagem e cor sólida são alternativas — escolher uma limpa a outra.",
+        "",
+        `**Fundo:** ${backgroundLine}`,
+        `**Destaque (borda/chakra/barras):** ${style.accent ? `\`${style.accent}\`` : "Padrão da categoria"}`
+      ].join("\n")
+    )
+    .setImage(`attachment://${filename}`);
+
+  const components = [
+    row(
+      button("openImageModal", "🖼️ Imagem", ButtonStyle.Secondary, target),
+      button("openColorModal", "🎨 Cor sólida", ButtonStyle.Secondary, target),
+      button("openAccentModal", "🟧 Destaque", ButtonStyle.Secondary, target)
+    ),
+    row(
+      button("resetStyle", "♻️ Restaurar padrão", ButtonStyle.Danger, target),
+      button("backToFicha", "⬅️ Voltar pra ficha", ButtonStyle.Secondary, target)
+    )
+  ];
 
   return { embeds: [embed], components, files: [attachment] };
 }
@@ -262,21 +353,36 @@ function buildCreateModal(): ModalBuilder {
     .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput));
 }
 
-function buildBackgroundModal(category: string): ModalBuilder {
+function buildImageModal(target: string): ModalBuilder {
   const urlInput = new TextInputBuilder()
-    .setCustomId(BACKGROUND_FIELD_ID)
-    .setLabel("Link da imagem de fundo")
-    .setPlaceholder("https://... (pra usar um anexo, rode .ficha fundo com a imagem anexada)")
+    .setCustomId(IMAGE_FIELD_ID)
+    .setLabel("Link direto da imagem")
+    .setPlaceholder("https://.../imagem.jpg — não link de página (Pinterest, Google Imagens...)")
     .setStyle(TextInputStyle.Short)
     .setMaxLength(500)
     .setRequired(true);
 
-  const theme = category !== NO_CATEGORY ? categoryTheme(category) : null;
+  return new ModalBuilder()
+    .setCustomId(buildId("imageModal", target))
+    .setTitle(`Imagem — ${targetDisplayName(target)}`.slice(0, 45))
+    .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(urlInput));
+}
+
+function buildColorModal(action: string, title: string, target: string, currentValue: string | null): ModalBuilder {
+  const hexInput = new TextInputBuilder()
+    .setCustomId(COLOR_FIELD_ID)
+    .setLabel("Cor em hexadecimal")
+    .setPlaceholder("#1b1230")
+    .setStyle(TextInputStyle.Short)
+    .setMinLength(7)
+    .setMaxLength(7)
+    .setRequired(true);
+  if (currentValue) hexInput.setValue(currentValue);
 
   return new ModalBuilder()
-    .setCustomId(buildId("backgroundModal", category))
-    .setTitle(`Alterar fundo${theme ? ` — ${theme.switchLabel.replace(/^\S+\s/, "")}` : ""}`.slice(0, 45))
-    .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(urlInput));
+    .setCustomId(buildId(action, target))
+    .setTitle(`${title} — ${targetDisplayName(target)}`.slice(0, 45))
+    .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(hexInput));
 }
 
 // ─── Roteamento de interações ─────────────────────────────────────────────────
@@ -290,12 +396,17 @@ function withClearedAttachments(view: FichaView): FichaView & { attachments: [] 
 
 async function handleFichaMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
   const { action, parts } = parseCustomId(interaction.customId);
+  const [target] = parts;
 
   if (interaction.isModalSubmit()) {
     if (action === "createModal") {
       await handleCreateModalSubmit(interaction, services);
-    } else if (action === "backgroundModal") {
-      await handleBackgroundModalSubmit(interaction, services, parts[0]);
+    } else if (action === "imageModal" && target) {
+      await handleImageModalSubmit(interaction, services, target);
+    } else if (action === "colorModal" && target) {
+      await handleColorModalSubmit(interaction, services, target);
+    } else if (action === "accentModal" && target) {
+      await handleAccentModalSubmit(interaction, services, target);
     }
     return;
   }
@@ -307,27 +418,61 @@ async function handleFichaMenuInteraction(interaction: MenuInteraction, services
       return;
     }
 
-    case "openBackgroundModal": {
-      if (!interaction.isButton()) return;
-      await interaction.showModal(buildBackgroundModal(parts[0] ?? NO_CATEGORY));
-      return;
-    }
-
     case "selectCategory": {
       if (!interaction.isButton()) return;
-      await handleSelectCategory(interaction, services, parts[0]);
+      await handleSelectCategory(interaction, services, target);
       return;
     }
 
     case "selectClan": {
       if (!interaction.isStringSelectMenu()) return;
-      await handleLink(interaction, services, "cla", interaction.values[0], parts[0]);
+      await handleLink(interaction, services, "cla", interaction.values[0], target);
       return;
     }
 
     case "selectVillage": {
       if (!interaction.isStringSelectMenu()) return;
-      await handleLink(interaction, services, "vila", interaction.values[0], parts[0]);
+      await handleLink(interaction, services, "vila", interaction.values[0], target);
+      return;
+    }
+
+    case "openVisualEditor": {
+      if (!interaction.isButton() || !target) return;
+      await handleOpenVisualEditor(interaction, services, target);
+      return;
+    }
+
+    case "openImageModal": {
+      if (!interaction.isButton() || !target) return;
+      await interaction.showModal(buildImageModal(target));
+      return;
+    }
+
+    case "openColorModal": {
+      if (!interaction.isButton() || !target) return;
+      const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+      const current = character ? services.characters.getCardStyle(character, target).backgroundColor : null;
+      await interaction.showModal(buildColorModal("colorModal", "Cor sólida", target, current));
+      return;
+    }
+
+    case "openAccentModal": {
+      if (!interaction.isButton() || !target) return;
+      const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+      const current = character ? services.characters.getCardStyle(character, target).accent : null;
+      await interaction.showModal(buildColorModal("accentModal", "Destaque", target, current));
+      return;
+    }
+
+    case "resetStyle": {
+      if (!interaction.isButton() || !target) return;
+      await handleResetStyle(interaction, services, target);
+      return;
+    }
+
+    case "backToFicha": {
+      if (!interaction.isButton() || !target) return;
+      await handleBackToFicha(interaction, services, target);
       return;
     }
 
@@ -348,6 +493,50 @@ async function handleSelectCategory(
   const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
   if (!character) return;
 
+  const view = await buildFichaView(interaction.guild, character, services, true, category);
+  await interaction.editReply(withClearedAttachments(view));
+}
+
+async function handleOpenVisualEditor(
+  interaction: ComponentMenuInteraction,
+  services: CommandServices,
+  target: string
+): Promise<void> {
+  await interaction.deferUpdate();
+
+  const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+  if (!character) return;
+
+  const view = await buildVisualEditorView(interaction.guild, character, services, target);
+  await interaction.editReply(withClearedAttachments(view));
+}
+
+async function handleResetStyle(
+  interaction: ComponentMenuInteraction,
+  services: CommandServices,
+  target: string
+): Promise<void> {
+  await interaction.deferUpdate();
+
+  const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+  if (!character) return;
+
+  const updated = await services.characters.resetCategoryStyle(interaction.guild, character, target);
+  const view = await buildVisualEditorView(interaction.guild, updated, services, target);
+  await interaction.editReply(withClearedAttachments(view));
+}
+
+async function handleBackToFicha(
+  interaction: ComponentMenuInteraction,
+  services: CommandServices,
+  target: string
+): Promise<void> {
+  await interaction.deferUpdate();
+
+  const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+  if (!character) return;
+
+  const category = target === DEFAULT_STYLE_TARGET ? undefined : target;
   const view = await buildFichaView(interaction.guild, character, services, true, category);
   await interaction.editReply(withClearedAttachments(view));
 }
@@ -402,20 +591,18 @@ async function handleCreateModalSubmit(
   }
 }
 
-async function handleBackgroundModalSubmit(
+/**
+ * As três abaixo seguem o mesmo formato: modal foi aberto a partir do editor visual
+ * (sempre "fromMessage"), então defer+edit a própria mensagem; erro de validação (imagem
+ * que não carrega, hex inválido) vira um toast efêmero sem mexer no preview já mostrado.
+ */
+async function handleImageModalSubmit(
   interaction: ModalSubmitInteraction<"cached">,
   services: CommandServices,
-  categoryPart: string | undefined
+  target: string
 ): Promise<void> {
-  const url = interaction.fields.getTextInputValue(BACKGROUND_FIELD_ID).trim();
-  const fromMessage = interaction.isFromMessage();
-  const category = categoryPart && categoryPart !== NO_CATEGORY ? categoryPart : null;
-
-  if (fromMessage) {
-    await interaction.deferUpdate();
-  } else {
-    await interaction.deferReply({ ephemeral: true });
-  }
+  const url = interaction.fields.getTextInputValue(IMAGE_FIELD_ID).trim();
+  await interaction.deferUpdate();
 
   try {
     if (!/^https?:\/\//i.test(url)) {
@@ -423,18 +610,62 @@ async function handleBackgroundModalSubmit(
     }
 
     const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
-    if (!character) {
-      throw new DomainError("Você ainda não tem uma ficha.");
-    }
+    if (!character) throw new DomainError("Você ainda não tem uma ficha.");
 
-    const updated = category
-      ? await services.characters.setCategoryBackground(interaction.guild, character, category, url)
-      : await services.characters.setBackground(interaction.guild, character, url);
-    const view = await buildFichaView(interaction.guild, updated, services, true, category);
-    await interaction.editReply(fromMessage ? withClearedAttachments(view) : view);
+    const updated = await services.characters.setCategoryImage(interaction.guild, character, target, url);
+    const view = await buildVisualEditorView(interaction.guild, updated, services, target);
+    await interaction.editReply(withClearedAttachments(view));
   } catch (error) {
     if (error instanceof DomainError) {
-      await interaction.editReply({ content: error.message, embeds: [], components: [], files: [] });
+      await interaction.followUp({ content: error.message, ephemeral: true });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function handleColorModalSubmit(
+  interaction: ModalSubmitInteraction<"cached">,
+  services: CommandServices,
+  target: string
+): Promise<void> {
+  const hex = interaction.fields.getTextInputValue(COLOR_FIELD_ID).trim();
+  await interaction.deferUpdate();
+
+  try {
+    const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+    if (!character) throw new DomainError("Você ainda não tem uma ficha.");
+
+    const updated = await services.characters.setCategoryColor(interaction.guild, character, target, hex);
+    const view = await buildVisualEditorView(interaction.guild, updated, services, target);
+    await interaction.editReply(withClearedAttachments(view));
+  } catch (error) {
+    if (error instanceof DomainError) {
+      await interaction.followUp({ content: error.message, ephemeral: true });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function handleAccentModalSubmit(
+  interaction: ModalSubmitInteraction<"cached">,
+  services: CommandServices,
+  target: string
+): Promise<void> {
+  const hex = interaction.fields.getTextInputValue(COLOR_FIELD_ID).trim();
+  await interaction.deferUpdate();
+
+  try {
+    const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+    if (!character) throw new DomainError("Você ainda não tem uma ficha.");
+
+    const updated = await services.characters.setCategoryAccent(interaction.guild, character, target, hex);
+    const view = await buildVisualEditorView(interaction.guild, updated, services, target);
+    await interaction.editReply(withClearedAttachments(view));
+  } catch (error) {
+    if (error instanceof DomainError) {
+      await interaction.followUp({ content: error.message, ephemeral: true });
       return;
     }
     throw error;

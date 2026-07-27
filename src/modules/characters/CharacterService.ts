@@ -1,7 +1,8 @@
 import type { Guild } from "discord.js";
 
 import { DomainError } from "../../core/errors.js";
-import type { Clan, PrismaClient, RankDefinition, Village } from "../../generated/prisma/client.js";
+import type { Clan, Prisma, PrismaClient, RankDefinition, Village } from "../../generated/prisma/client.js";
+import { HEX_COLOR_PATTERN, validateImageUrl } from "../../services/cardGenerator.js";
 import type { AttributeService } from "../attributes/AttributeService.js";
 import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
@@ -10,6 +11,10 @@ import { normalizeBonuses, type WorldConfigService } from "../world/WorldConfigS
 export class CharacterRuleError extends DomainError {}
 
 export type LinkKind = "cla" | "vila" | "rank";
+
+/** Alvo do estilo do card: uma categoria de atributo (fisico/mental) ou "_default"
+ * (ficha sem nenhum atributo cadastrado ainda). */
+export const DEFAULT_STYLE_TARGET = "_default";
 
 const WORLD_INCLUDE = { clan: true, village: true, rank: true } as const;
 
@@ -22,13 +27,25 @@ export interface CharacterWithWorld {
   villageId: string | null;
   rankId: string | null;
   backgroundUrl: string | null;
-  categoryBackgrounds: unknown;
+  cardStyles: unknown;
   attributes: unknown;
   metadata: unknown;
   isActive: boolean;
   clan: Clan | null;
   village: Village | null;
   rank: RankDefinition | null;
+}
+
+export interface CardStyle {
+  backgroundUrl: string | null;
+  backgroundColor: string | null;
+  accent: string | null;
+}
+
+interface StyleEntry {
+  backgroundUrl?: string;
+  backgroundColor?: string;
+  accent?: string;
 }
 
 export interface CharacterAttributeView {
@@ -167,6 +184,14 @@ export class CharacterService {
     character: CharacterWithWorld,
     backgroundUrl: string | null
   ): Promise<CharacterWithWorld> {
+    if (backgroundUrl && !(await validateImageUrl(backgroundUrl))) {
+      throw new CharacterRuleError(
+        "Não consegui carregar essa imagem. Confira se o link aponta direto pro arquivo " +
+          "(termina em .jpg/.png/.webp) — links de página como Pinterest/Google Imagens não funcionam, " +
+          "só o link \"copiar endereço da imagem\"."
+      );
+    }
+
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
 
     const updated = await this.prisma.character.update({
@@ -186,41 +211,144 @@ export class CharacterService {
     return updated;
   }
 
-  public async setCategoryBackground(
+  private getStyleMap(character: CharacterWithWorld): Record<string, StyleEntry> {
+    return isRecordOfStyleEntries(character.cardStyles) ? character.cardStyles : {};
+  }
+
+  private async updateStyleEntry(
     guild: Guild,
     character: CharacterWithWorld,
-    category: string,
-    backgroundUrl: string
+    target: string,
+    entry: StyleEntry,
+    action: string
   ): Promise<CharacterWithWorld> {
     const rpgGuild = await this.guildConfig.ensureGuild(guild);
-    const current = isRecordOfStrings(character.categoryBackgrounds) ? character.categoryBackgrounds : {};
+    const styles = { ...this.getStyleMap(character), [target]: entry };
 
     const updated = await this.prisma.character.update({
       where: { id: character.id },
-      data: { categoryBackgrounds: { ...current, [category]: backgroundUrl } },
+      data: { cardStyles: styles as unknown as Prisma.InputJsonValue },
       include: WORLD_INCLUDE
     });
 
     await this.guildConfig.writeAuditLog({
       guildId: rpgGuild.id,
       actorId: character.userId,
-      action: "character.background.updateCategory",
+      action,
       targetType: "Character",
       targetId: character.id,
-      after: { category }
+      after: { target }
     });
 
     return updated;
   }
 
-  /** Fundo específico da categoria se configurado, senão o fundo padrão da ficha (pode ser null). */
-  public getBackgroundForCategory(character: CharacterWithWorld, category: string | null): string | null {
-    if (category) {
-      const map = isRecordOfStrings(character.categoryBackgrounds) ? character.categoryBackgrounds : {};
-      const specific = map[category];
-      if (specific) return specific;
+  /** Define a imagem de fundo do card pra essa categoria — limpa a cor sólida (mutuamente exclusivas). */
+  public async setCategoryImage(
+    guild: Guild,
+    character: CharacterWithWorld,
+    target: string,
+    imageUrl: string
+  ): Promise<CharacterWithWorld> {
+    if (!(await validateImageUrl(imageUrl))) {
+      throw new CharacterRuleError(
+        "Não consegui carregar essa imagem. Confira se o link aponta direto pro arquivo " +
+          "(termina em .jpg/.png/.webp) — links de página como Pinterest/Google Imagens não funcionam, " +
+          "só o link \"copiar endereço da imagem\"."
+      );
     }
-    return character.backgroundUrl;
+
+    const current = this.getStyleMap(character)[target] ?? {};
+    return this.updateStyleEntry(
+      guild,
+      character,
+      target,
+      { ...current, backgroundUrl: imageUrl, backgroundColor: undefined },
+      "character.style.setImage"
+    );
+  }
+
+  /** Define um fundo de cor sólida pra essa categoria — limpa a imagem (mutuamente exclusivas). */
+  public async setCategoryColor(
+    guild: Guild,
+    character: CharacterWithWorld,
+    target: string,
+    hexColor: string
+  ): Promise<CharacterWithWorld> {
+    if (!HEX_COLOR_PATTERN.test(hexColor)) {
+      throw new CharacterRuleError(`Cor inválida: \`${hexColor}\`. Use o formato hexadecimal, ex: \`#1b1230\`.`);
+    }
+
+    const current = this.getStyleMap(character)[target] ?? {};
+    return this.updateStyleEntry(
+      guild,
+      character,
+      target,
+      { ...current, backgroundColor: hexColor, backgroundUrl: undefined },
+      "character.style.setColor"
+    );
+  }
+
+  /** Cor de destaque (borda, chakra, badges, barras) — independente do fundo escolhido. */
+  public async setCategoryAccent(
+    guild: Guild,
+    character: CharacterWithWorld,
+    target: string,
+    hexColor: string
+  ): Promise<CharacterWithWorld> {
+    if (!HEX_COLOR_PATTERN.test(hexColor)) {
+      throw new CharacterRuleError(`Cor inválida: \`${hexColor}\`. Use o formato hexadecimal, ex: \`#ff6b1a\`.`);
+    }
+
+    const current = this.getStyleMap(character)[target] ?? {};
+    return this.updateStyleEntry(
+      guild,
+      character,
+      target,
+      { ...current, accent: hexColor },
+      "character.style.setAccent"
+    );
+  }
+
+  /** Remove todo o estilo customizado dessa categoria — volta pro tema padrão. */
+  public async resetCategoryStyle(guild: Guild, character: CharacterWithWorld, target: string): Promise<CharacterWithWorld> {
+    const styles = { ...this.getStyleMap(character) };
+    delete styles[target];
+
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data: { cardStyles: styles as unknown as Prisma.InputJsonValue },
+      include: WORLD_INCLUDE
+    });
+
+    await this.guildConfig.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId: character.userId,
+      action: "character.style.reset",
+      targetType: "Character",
+      targetId: character.id,
+      after: { target }
+    });
+
+    return updated;
+  }
+
+  /**
+   * Resolve o estilo efetivo do card pra uma categoria (ou DEFAULT_STYLE_TARGET): imagem e
+   * cor sólida são mutuamente exclusivas — se a categoria não tem nenhuma das duas, cai no
+   * fundo genérico da ficha (`backgroundUrl`). O accent é sempre independente.
+   */
+  public getCardStyle(character: CharacterWithWorld, target: string): CardStyle {
+    const entry = this.getStyleMap(character)[target];
+
+    if (entry?.backgroundUrl) {
+      return { backgroundUrl: entry.backgroundUrl, backgroundColor: null, accent: entry.accent ?? null };
+    }
+    if (entry?.backgroundColor) {
+      return { backgroundUrl: null, backgroundColor: entry.backgroundColor, accent: entry.accent ?? null };
+    }
+    return { backgroundUrl: character.backgroundUrl, backgroundColor: null, accent: entry?.accent ?? null };
   }
 
   public getBaseAttributeSnapshot(character: CharacterWithWorld): Record<string, number> {
@@ -283,11 +411,6 @@ function isRecordOfNumbers(value: unknown): value is Record<string, number> {
   );
 }
 
-function isRecordOfStrings(value: unknown): value is Record<string, string> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value as Record<string, unknown>).every((v) => typeof v === "string")
-  );
+function isRecordOfStyleEntries(value: unknown): value is Record<string, StyleEntry> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

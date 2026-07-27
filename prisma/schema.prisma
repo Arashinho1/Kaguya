@@ -115,10 +115,12 @@ model Character {
   clanId     String?
   villageId  String?
   rankId     String?
-  /** Fundo padrão/fallback do card (usado quando não há fundo específico pra categoria). */
+  /** Fundo genérico/fallback (usado quando a categoria não tem estilo próprio). */
   backgroundUrl String?
-  /** Fundo por categoria de atributo (fisico/mental), Record<category, url> — cada card pode ter o seu. */
-  categoryBackgrounds Json @default("{}")
+  /** Estilo visual do card por categoria (fisico/mental) ou "_default" (ficha sem atributos).
+   * Shape: Record<target, { backgroundUrl?, backgroundColor?, accent? }> — imagem e cor sólida
+   * são mutuamente exclusivas por categoria (ver CharacterService.getCardStyle). */
+  cardStyles Json @default("{}")
   attributes Json     @default("{}")
   metadata   Json     @default("{}")
   isActive   Boolean  @default(true)

@@ -39,10 +39,15 @@ export interface CardAttribute {
   maxValue: number | null;
 }
 
+/** Formato aceito nos campos de cor dos modais do editor visual (#rrggbb). */
+export const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
 export interface CardParams {
   characterName: string;
   avatarUrl: string;
   backgroundUrl: string | null;
+  /** Fundo sólido (gradiente sutil a partir dessa cor) — só usado se backgroundUrl for null/falhar. */
+  backgroundColor?: string | null;
   rankName: string | null;
   villageName: string | null;
   clanName: string | null;
@@ -68,7 +73,7 @@ export async function renderFichaCard(params: CardParams): Promise<Buffer> {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
 
-  await drawBackground(ctx, params.backgroundUrl);
+  await drawBackground(ctx, params.backgroundUrl, params.backgroundColor ?? null);
   drawOverlay(ctx);
   // Fundos de usuário podem ser claros ou muito "cheios" (ver feedback de visibilidade) —
   // painéis semi-opacos atrás do texto garantem contraste mínimo independente da imagem.
@@ -95,13 +100,25 @@ async function loadRemoteImage(url: string): Promise<Image | null> {
   }
 }
 
-async function drawBackground(ctx: SKRSContext2D, backgroundUrl: string | null): Promise<void> {
+/**
+ * Confere se um link realmente carrega como imagem antes de salvar como fundo — sem
+ * isso, um link de página (ex: um link curto do Pinterest, que aponta pro post em vez
+ * do arquivo .jpg) falha silenciosamente e o card cai no gradiente padrão sem avisar nada.
+ */
+export async function validateImageUrl(url: string): Promise<boolean> {
+  return (await loadRemoteImage(url)) !== null;
+}
+
+async function drawBackground(ctx: SKRSContext2D, backgroundUrl: string | null, backgroundColor: string | null): Promise<void> {
   const image = backgroundUrl ? await loadRemoteImage(backgroundUrl) : null;
 
   if (!image) {
+    const [from, to] = backgroundColor && HEX_COLOR_PATTERN.test(backgroundColor)
+      ? [backgroundColor, darken(backgroundColor, 0.5)]
+      : ["#1b1230", "#3a1c12"];
     const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-    gradient.addColorStop(0, "#1b1230");
-    gradient.addColorStop(1, "#3a1c12");
+    gradient.addColorStop(0, from);
+    gradient.addColorStop(1, to);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     return;
@@ -172,6 +189,13 @@ function withAlpha(hex: string, alpha: number): string {
 function lighten(hex: string, amount: number): string {
   const [r, g, b] = hexToRgb(hex);
   const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+/** Mistura a cor com preto — usada pro segundo tom do gradiente de fundo sólido (dá profundidade). */
+function darken(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const mix = (channel: number) => Math.round(channel * (1 - amount));
   return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
 }
 
