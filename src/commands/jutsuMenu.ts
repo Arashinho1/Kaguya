@@ -335,21 +335,36 @@ export async function handleJutsuMenuInteraction(interaction: MenuInteraction, s
   }
 }
 
+/**
+ * Discord mantém anexos antigos da mensagem numa edição a menos que `attachments`
+ * seja explicitamente informado — sem isso, a imagem de uma view anterior (ex: o
+ * detalhe de um jutsu) continua aparecendo em telas seguintes que não têm imagem
+ * nenhuma. Toda edição de mensagem do menu passa por aqui pra sempre zerar isso.
+ */
+function withClearedAttachments(view: InteractiveView): InteractiveView & { attachments: [] } {
+  return { ...view, files: view.files ?? [], attachments: [] };
+}
+
 async function updateOrFallback(interaction: MenuInteraction, view: InteractiveView | null): Promise<void> {
   if (!view) {
     await interaction.reply({ content: "Não encontrei mais esse conteúdo — pode ter sido removido.", ephemeral: true });
     return;
   }
-  await interaction.update(view);
+  await interaction.update(withClearedAttachments(view));
 }
 
 /** Mesma coisa que updateOrFallback, mas pra depois de um deferUpdate() (edita em vez de "update"). */
 async function editOrFallback(interaction: MenuInteraction, view: InteractiveView | null): Promise<void> {
   if (!view) {
-    await interaction.editReply({ content: "Não encontrei mais esse conteúdo — pode ter sido removido.", embeds: [], components: [] });
+    await interaction.editReply({
+      content: "Não encontrei mais esse conteúdo — pode ter sido removido.",
+      embeds: [],
+      components: [],
+      attachments: []
+    });
     return;
   }
-  await interaction.editReply(view);
+  await interaction.editReply(withClearedAttachments(view));
 }
 
 async function handleJutsuAction(
