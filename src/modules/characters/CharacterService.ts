@@ -91,8 +91,12 @@ export class CharacterService {
     const activeAttributes = await this.attributes.listAttributes(guild);
     const snapshot = Object.fromEntries(activeAttributes.map((attr) => [attr.key, attr.baseValue]));
 
+    // Rank não é escolha do jogador — começa no de menor sortOrder cadastrado (ex: "Estudante").
+    // Promoção é responsabilidade de um sistema futuro (vagas/graduação), não da criação da ficha.
+    const [initialRank] = await this.world.listRanks(guild);
+
     const created = await this.prisma.character.create({
-      data: { guildId: rpgGuild.id, userId, name, attributes: snapshot },
+      data: { guildId: rpgGuild.id, userId, name, attributes: snapshot, rankId: initialRank?.id },
       include: WORLD_INCLUDE
     });
 

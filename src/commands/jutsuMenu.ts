@@ -12,9 +12,12 @@ import {
   type StringSelectMenuInteraction
 } from "discord.js";
 
+import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import { DomainError } from "../core/errors.js";
+import type { MenuInteraction } from "../core/commands/menuRegistry.js";
 import type { JutsuService } from "../modules/jutsus/JutsuService.js";
 import type { CommandServices } from "../types/command.js";
+import { menuRegistry } from "./menus.js";
 import {
   elementEmoji,
   EMBED_COLOR,
@@ -45,19 +48,11 @@ export interface InteractiveView {
   files?: AttachmentBuilder[];
 }
 
-type MenuInteraction = StringSelectMenuInteraction<"cached"> | ButtonInteraction<"cached">;
-
-export function isJutsuMenuInteraction(customId: string): boolean {
-  return customId.startsWith(`${ID_PREFIX}:`);
-}
+/** JutsuMenu não usa modal — só select/botão. */
+type ComponentMenuInteraction = StringSelectMenuInteraction<"cached"> | ButtonInteraction<"cached">;
 
 function buildId(action: string, ...parts: string[]): string {
-  return [ID_PREFIX, action, ...parts].join(":");
-}
-
-function parseId(customId: string): { action: string; parts: string[] } {
-  const [, action, ...parts] = customId.split(":");
-  return { action: action ?? "", parts };
+  return buildCustomId(ID_PREFIX, action, ...parts);
 }
 
 function button(action: string, label: string, style: ButtonStyle, ...parts: string[]): ButtonBuilder {
@@ -262,7 +257,11 @@ export async function buildJutsuDetailView(
 // ─── Roteamento de interações ─────────────────────────────────────────────────
 
 export async function handleJutsuMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
-  const { action, parts } = parseId(interaction.customId);
+  if (interaction.isModalSubmit()) {
+    return;
+  }
+
+  const { action, parts } = parseCustomId(interaction.customId);
   const selected = interaction.isStringSelectMenu() ? interaction.values[0] : undefined;
 
   switch (action) {
@@ -345,7 +344,7 @@ function withClearedAttachments(view: InteractiveView): InteractiveView & { atta
   return { ...view, files: view.files ?? [], attachments: [] };
 }
 
-async function updateOrFallback(interaction: MenuInteraction, view: InteractiveView | null): Promise<void> {
+async function updateOrFallback(interaction: ComponentMenuInteraction, view: InteractiveView | null): Promise<void> {
   if (!view) {
     await interaction.reply({ content: "Não encontrei mais esse conteúdo — pode ter sido removido.", ephemeral: true });
     return;
@@ -354,7 +353,7 @@ async function updateOrFallback(interaction: MenuInteraction, view: InteractiveV
 }
 
 /** Mesma coisa que updateOrFallback, mas pra depois de um deferUpdate() (edita em vez de "update"). */
-async function editOrFallback(interaction: MenuInteraction, view: InteractiveView | null): Promise<void> {
+async function editOrFallback(interaction: ComponentMenuInteraction, view: InteractiveView | null): Promise<void> {
   if (!view) {
     await interaction.editReply({
       content: "Não encontrei mais esse conteúdo — pode ter sido removido.",
@@ -368,7 +367,7 @@ async function editOrFallback(interaction: MenuInteraction, view: InteractiveVie
 }
 
 async function handleJutsuAction(
-  interaction: MenuInteraction,
+  interaction: ComponentMenuInteraction,
   services: CommandServices,
   jutsuKey: string,
   kind: "learn" | "use"
@@ -404,3 +403,5 @@ async function handleJutsuAction(
     throw error;
   }
 }
+
+menuRegistry.register({ prefix: ID_PREFIX, handle: handleJutsuMenuInteraction });

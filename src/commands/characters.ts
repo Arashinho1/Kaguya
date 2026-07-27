@@ -1,7 +1,6 @@
-import { EmbedBuilder } from "discord.js";
-
 import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
 import { registerModule } from "../core/modules/registry.js";
+import { buildCreatePromptView, buildFichaView } from "./fichaMenu.js";
 import type { LinkKind } from "../modules/characters/CharacterService.js";
 import type { CommandServices } from "../types/command.js";
 
@@ -19,11 +18,11 @@ const criarArgs = [
   { name: "nome", type: "text", description: "Nome do personagem." }
 ] as const satisfies readonly ArgDef[];
 
-const LINK_KINDS = ["cla", "vila", "rank"] as const;
+const LINK_KINDS = ["cla", "vila"] as const;
 
 const vincularArgs = [
-  { name: "tipo", type: "string", description: "cla, vila ou rank.", choices: LINK_KINDS },
-  { name: "nome", type: "text", description: "Nome (clã/vila) ou chave (rank)." }
+  { name: "tipo", type: "string", description: "cla ou vila.", choices: LINK_KINDS },
+  { name: "nome", type: "text", description: "Nome do clã ou da vila." }
 ] as const satisfies readonly ArgDef[];
 
 export const characterCommand = defineCommandGroup<CommandServices>({
@@ -36,40 +35,24 @@ export const characterCommand = defineCommandGroup<CommandServices>({
   subcommands: [
     defineSubcommand<typeof verArgs, CommandServices>({
       name: "ver",
-      description: "Mostra sua ficha ou a de outro jogador.",
+      description: "Abre o menu da sua ficha (ou mostra a de outro jogador).",
       args: verArgs,
       async handler(ctx) {
         const target = ctx.args.usuario ?? ctx.user;
+        const isOwner = target.id === ctx.user.id;
         const character = await ctx.services.characters.getActiveCharacter(ctx.guild, target.id);
 
         if (!character) {
-          await ctx.reply(
-            target.id === ctx.user.id
-              ? "Você ainda não tem uma ficha. Crie uma com `.ficha criar <nome>`."
-              : `${target.username} ainda não tem uma ficha ativa.`
-          );
+          if (!isOwner) {
+            await ctx.reply(`${target.username} ainda não tem uma ficha ativa.`);
+            return;
+          }
+          await ctx.reply(buildCreatePromptView());
           return;
         }
 
-        const view = await ctx.services.characters.getCharacterView(ctx.guild, character);
-
-        const embed = new EmbedBuilder()
-          .setTitle(view.character.name)
-          .setDescription(
-            view.attributes.length > 0
-              ? view.attributes
-                  .map((attr) => `**${attr.name}**: ${attr.value}${attr.bonus !== 0 ? ` (${attr.baseValue} + ${attr.bonus})` : ""}`)
-                  .join("\n")
-              : "Nenhum atributo configurado neste servidor ainda."
-          )
-          .addFields(
-            { name: "Chakra", value: String(view.chakra), inline: true },
-            { name: "Clã", value: view.character.clan?.name ?? "—", inline: true },
-            { name: "Vila", value: view.character.village?.name ?? "—", inline: true },
-            { name: "Rank", value: view.character.rank?.name ?? "—", inline: true }
-          );
-
-        await ctx.reply({ embeds: [embed] });
+        const view = await buildFichaView(ctx.guild, character, ctx.services, isOwner);
+        await ctx.reply(view);
       }
     }),
 
@@ -85,7 +68,7 @@ export const characterCommand = defineCommandGroup<CommandServices>({
 
     defineSubcommand<typeof vincularArgs, CommandServices>({
       name: "vincular",
-      description: "Vincula sua ficha a um clã, vila ou rank cadastrado.",
+      description: "Vincula sua ficha a um clã ou vila cadastrado.",
       args: vincularArgs,
       async handler(ctx) {
         const updated = await ctx.services.characters.linkCharacter(

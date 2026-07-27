@@ -5,6 +5,7 @@ import type { ArgDef } from "../core/commands/index.js";
 import { listModules } from "../core/modules/registry.js";
 import type { CommandServices } from "../types/command.js";
 import { commandRegistry } from "./index.js";
+import { BRAND_COLOR } from "./uiConstants.js";
 
 const GERAL_KEY = "__geral__";
 
@@ -33,7 +34,7 @@ const MODULE_EMOJI: Record<string, string> = {
 };
 
 const MODULE_FALLBACK_EMOJI = "📦";
-const EMBED_COLOR = 0xff6b1a;
+const EMBED_COLOR = BRAND_COLOR;
 
 const semArgs = [] as const satisfies readonly ArgDef[];
 

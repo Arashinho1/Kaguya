@@ -1,12 +1,15 @@
 import { AttachmentBuilder } from "discord.js";
 
+import { BRAND_COLOR, truncate } from "./uiConstants.js";
+
 /**
  * Helpers visuais compartilhados entre o comando de texto (.jutsu) e o menu
  * interativo (JutsuMenu) — cor/emoji por rank, emoji por tipo/elemento, ordenação.
  * Puramente apresentação; não sabe nada de Prisma/serviço.
  */
 
-export const EMBED_COLOR = 0xff6b1a;
+export { truncate };
+export const EMBED_COLOR = BRAND_COLOR;
 
 export const RANK_ORDER: Record<string, number> = { D: 1, C: 2, B: 3, A: 4, S: 5 };
 
@@ -71,11 +74,6 @@ export function sortByRank<T extends { jutsuRank: string | null; name: string }>
     const diff = (RANK_ORDER[a.jutsuRank ?? ""] ?? 0) - (RANK_ORDER[b.jutsuRank ?? ""] ?? 0);
     return diff !== 0 ? diff : a.name.localeCompare(b.name);
   });
-}
-
-/** Trunca preservando limites de campo do Discord (label/description de SelectMenuOption = 100). */
-export function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 export interface ImageAttachmentResult {

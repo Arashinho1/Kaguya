@@ -1,7 +1,7 @@
 import type { Interaction } from "discord.js";
 
 import { commandRegistry } from "../commands/index.js";
-import { handleJutsuMenuInteraction, isJutsuMenuInteraction } from "../commands/jutsuMenu.js";
+import { menuRegistry } from "../commands/menus.js";
 import { DomainError } from "../core/errors.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
@@ -14,15 +14,11 @@ export async function handleInteractionCreate(
     return;
   }
 
-  if (interaction.isStringSelectMenu() || interaction.isButton()) {
-    if (!isJutsuMenuInteraction(interaction.customId)) {
-      return;
-    }
-
+  if (interaction.isStringSelectMenu() || interaction.isButton() || interaction.isModalSubmit()) {
     try {
-      await handleJutsuMenuInteraction(interaction, services);
+      await menuRegistry.dispatch(interaction, services);
     } catch (error) {
-      console.error("[jutsu-menu]", error);
+      console.error("[menu]", error);
       const payload = { content: "Não consegui processar essa ação. Tente novamente.", ephemeral: true };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(payload);
