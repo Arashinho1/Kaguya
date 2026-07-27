@@ -4,6 +4,7 @@ import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/comma
 import { registerModule } from "../core/modules/registry.js";
 import { WorldRuleError } from "../modules/world/WorldConfigService.js";
 import type { CommandServices } from "../types/command.js";
+import { buildWorldConfigView } from "./worldMenu.js";
 
 registerModule({
   key: "world",
@@ -39,8 +40,18 @@ export const worldCommand = defineCommandGroup<CommandServices>({
   description: "Configura clãs, vilas e ranks do RPG.",
   access: "admin",
   module: "world",
-  defaultSubcommand: "listar",
+  defaultSubcommand: "config",
   subcommands: [
+    defineSubcommand<typeof listarArgs, CommandServices>({
+      name: "config",
+      description: "Abre o menu de configuração do mundo (criar/editar/remover por botão).",
+      args: listarArgs,
+      async handler(ctx) {
+        const view = await buildWorldConfigView(ctx.guild, ctx.services);
+        await ctx.reply(view);
+      }
+    }),
+
     defineSubcommand<typeof listarArgs, CommandServices>({
       name: "listar",
       description: "Lista clãs, vilas e ranks configurados.",
@@ -185,7 +196,7 @@ function buildWorldUpdate(
   }
 }
 
-function parseBonuses(value: string): Record<string, number> {
+export function parseBonuses(value: string): Record<string, number> {
   const bonuses: Record<string, number> = {};
 
   for (const pair of value.split(",")) {
