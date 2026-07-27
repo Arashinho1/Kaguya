@@ -24,9 +24,14 @@ function ensureFontsRegistered(): void {
 
 const WIDTH = 960;
 const HEIGHT = 540;
-const ACCENT = "#ff6b1a";
-const ACCENT_SOFT = "rgba(255, 107, 26, 0.45)";
+const DEFAULT_ACCENT = "#ff6b1a";
 const PANEL_FILL = "rgba(8, 5, 12, 0.45)";
+
+/** Espaço reservado ao painel de identidade (avatar/nome/badges/chakra). */
+const HEADER_PANEL = { x: 24, y: 24, w: WIDTH - 48, h: 196 };
+/** Painel dos atributos — começa depois de uma folga clara do painel de cima, pra
+ * o rótulo da seção nunca ficar colado na costura ou no avatar (feedback de UX). */
+const BODY_PANEL = { x: 24, y: 236, w: WIDTH - 48, h: HEIGHT - 236 - 24 };
 
 export interface CardAttribute {
   name: string;
@@ -45,8 +50,11 @@ export interface CardParams {
   trainingPoints: number | null;
   attributes: CardAttribute[];
   /** Desenhado acima das barras — usado quando a ficha gera um card por categoria de
-   * atributo (ex: "💪 Atributos Físicos" / "🧠 Atributos Mentais"), ver fichaMenu.ts. */
+   * atributo (ex: "ATRIBUTOS FÍSICOS" / "ATRIBUTOS MENTAIS"), ver fichaMenu.ts. */
   sectionLabel?: string | null;
+  /** Cor de destaque (frame, chakra, badges, barras) — cada categoria pode ter a sua
+   * pra não ficarem visualmente idênticas (ver CATEGORY_THEME em fichaMenu.ts). */
+  accent?: string;
 }
 
 const MAX_ATTRIBUTE_BARS = 8;
@@ -55,6 +63,8 @@ const FETCH_TIMEOUT_MS = 6000;
 export async function renderFichaCard(params: CardParams): Promise<Buffer> {
   ensureFontsRegistered();
 
+  const accent = params.accent ?? DEFAULT_ACCENT;
+
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
 
@@ -62,14 +72,14 @@ export async function renderFichaCard(params: CardParams): Promise<Buffer> {
   drawOverlay(ctx);
   // Fundos de usuário podem ser claros ou muito "cheios" (ver feedback de visibilidade) —
   // painéis semi-opacos atrás do texto garantem contraste mínimo independente da imagem.
-  drawPanel(ctx, 24, 24, WIDTH - 48, 196, 24);
+  drawPanel(ctx, HEADER_PANEL.x, HEADER_PANEL.y, HEADER_PANEL.w, HEADER_PANEL.h, 24);
   if (params.attributes.length > 0) {
-    drawPanel(ctx, 24, 226, WIDTH - 48, HEIGHT - 226 - 24, 24);
+    drawPanel(ctx, BODY_PANEL.x, BODY_PANEL.y, BODY_PANEL.w, BODY_PANEL.h, 24);
   }
-  await drawAvatarAndHeader(ctx, params);
-  drawChakraStat(ctx, params.chakra, params.trainingPoints);
-  drawAttributeBars(ctx, params.attributes, params.sectionLabel);
-  drawFrame(ctx);
+  await drawAvatarAndHeader(ctx, params, accent);
+  drawChakraStat(ctx, params.chakra, params.trainingPoints, accent);
+  drawAttributeBars(ctx, params.attributes, params.sectionLabel, accent);
+  drawFrame(ctx, accent);
 
   return canvas.toBuffer("image/png");
 }
@@ -144,16 +154,37 @@ function withTextShadow(ctx: SKRSContext2D, draw: () => void): void {
   ctx.restore();
 }
 
-function drawFrame(ctx: SKRSContext2D): void {
+function hexToRgb(hex: string): [number, number, number] {
+  const normalized = hex.replace("#", "");
+  return [
+    Number.parseInt(normalized.substring(0, 2), 16),
+    Number.parseInt(normalized.substring(2, 4), 16),
+    Number.parseInt(normalized.substring(4, 6), 16)
+  ];
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Mistura a cor com branco — usada pro início do gradiente das barras (mais clara que o accent). */
+function lighten(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+function drawFrame(ctx: SKRSContext2D, accent: string): void {
   ctx.save();
-  ctx.strokeStyle = ACCENT;
+  ctx.strokeStyle = accent;
   ctx.lineWidth = 6;
   roundRectPath(ctx, 6, 6, WIDTH - 12, HEIGHT - 12, 28);
   ctx.stroke();
   ctx.restore();
 }
 
-async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Promise<void> {
+async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams, accent: string): Promise<void> {
   const cx = 130;
   const cy = 130;
   const radius = 74;
@@ -174,7 +205,7 @@ async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Prom
   ctx.restore();
 
   ctx.save();
-  ctx.strokeStyle = ACCENT;
+  ctx.strokeStyle = accent;
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -201,10 +232,10 @@ async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Prom
     const badgeWidth = textWidth + paddingX * 2;
     const badgeHeight = 34;
 
-    ctx.fillStyle = ACCENT_SOFT;
+    ctx.fillStyle = withAlpha(accent, 0.45);
     roundRectPath(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2);
     ctx.fill();
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 1.5;
     roundRectPath(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2);
     ctx.stroke();
@@ -216,7 +247,7 @@ async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Prom
   }
 }
 
-function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: number | null): void {
+function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: number | null, accent: string): void {
   ctx.textAlign = "right";
 
   ctx.font = `600 18px "${FONT_SEMIBOLD}"`;
@@ -224,7 +255,7 @@ function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: numb
   withTextShadow(ctx, () => ctx.fillText("CHAKRA", WIDTH - 40, 60));
 
   ctx.font = `bold 56px "${FONT_BOLD}"`;
-  ctx.fillStyle = ACCENT;
+  ctx.fillStyle = accent;
   withTextShadow(ctx, () => ctx.fillText(String(chakra), WIDTH - 40, 112));
 
   if (trainingPoints !== null) {
@@ -236,14 +267,22 @@ function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: numb
   ctx.textAlign = "left";
 }
 
-function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sectionLabel?: string | null): void {
+function drawAttributeBars(
+  ctx: SKRSContext2D,
+  attributes: CardAttribute[],
+  sectionLabel: string | null | undefined,
+  accent: string
+): void {
   const shown = attributes.slice(0, MAX_ATTRIBUTE_BARS);
   if (shown.length === 0) return;
 
+  // Rótulo com bastante folga do topo do painel (que por sua vez já tem folga do
+  // avatar) — antes ficava colado na costura entre os dois painéis (feedback de UX).
+  const labelY = BODY_PANEL.y + 38;
   if (sectionLabel) {
     ctx.font = `600 22px "${FONT_SEMIBOLD}"`;
-    ctx.fillStyle = ACCENT;
-    withTextShadow(ctx, () => ctx.fillText(sectionLabel, 60, 228));
+    ctx.fillStyle = accent;
+    withTextShadow(ctx, () => ctx.fillText(sectionLabel, 60, labelY));
   }
 
   // Só considera atributos sem maxValue próprio pra não deixar um atributo com teto alto
@@ -253,9 +292,10 @@ function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sect
 
   const colX = [60, 500];
   const colWidth = 400;
-  const rowHeight = 70;
-  const startY = sectionLabel ? 260 : 250;
+  const rowHeight = 56;
+  const startY = sectionLabel ? labelY + 34 : BODY_PANEL.y + 40;
   const barHeight = 14;
+  const barStart = lighten(accent, 0.35);
 
   shown.forEach((attr, index) => {
     const col = index % 2;
@@ -285,8 +325,8 @@ function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sect
 
     if (ratio > 0) {
       const fillGradient = ctx.createLinearGradient(x, 0, x + colWidth, 0);
-      fillGradient.addColorStop(0, "#ffb347");
-      fillGradient.addColorStop(1, ACCENT);
+      fillGradient.addColorStop(0, barStart);
+      fillGradient.addColorStop(1, accent);
       ctx.fillStyle = fillGradient;
       roundRectPath(ctx, x, trackY, colWidth * ratio, barHeight, barHeight / 2);
       ctx.fill();

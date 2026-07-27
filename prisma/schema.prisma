@@ -115,7 +115,10 @@ model Character {
   clanId     String?
   villageId  String?
   rankId     String?
+  /** Fundo padrão/fallback do card (usado quando não há fundo específico pra categoria). */
   backgroundUrl String?
+  /** Fundo por categoria de atributo (fisico/mental), Record<category, url> — cada card pode ter o seu. */
+  categoryBackgrounds Json @default("{}")
   attributes Json     @default("{}")
   metadata   Json     @default("{}")
   isActive   Boolean  @default(true)

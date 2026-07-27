@@ -22,6 +22,7 @@ export interface CharacterWithWorld {
   villageId: string | null;
   rankId: string | null;
   backgroundUrl: string | null;
+  categoryBackgrounds: unknown;
   attributes: unknown;
   metadata: unknown;
   isActive: boolean;
@@ -185,6 +186,43 @@ export class CharacterService {
     return updated;
   }
 
+  public async setCategoryBackground(
+    guild: Guild,
+    character: CharacterWithWorld,
+    category: string,
+    backgroundUrl: string
+  ): Promise<CharacterWithWorld> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const current = isRecordOfStrings(character.categoryBackgrounds) ? character.categoryBackgrounds : {};
+
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data: { categoryBackgrounds: { ...current, [category]: backgroundUrl } },
+      include: WORLD_INCLUDE
+    });
+
+    await this.guildConfig.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId: character.userId,
+      action: "character.background.updateCategory",
+      targetType: "Character",
+      targetId: character.id,
+      after: { category }
+    });
+
+    return updated;
+  }
+
+  /** Fundo específico da categoria se configurado, senão o fundo padrão da ficha (pode ser null). */
+  public getBackgroundForCategory(character: CharacterWithWorld, category: string | null): string | null {
+    if (category) {
+      const map = isRecordOfStrings(character.categoryBackgrounds) ? character.categoryBackgrounds : {};
+      const specific = map[category];
+      if (specific) return specific;
+    }
+    return character.backgroundUrl;
+  }
+
   public getBaseAttributeSnapshot(character: CharacterWithWorld): Record<string, number> {
     return isRecordOfNumbers(character.attributes) ? character.attributes : {};
   }
@@ -242,5 +280,14 @@ function isRecordOfNumbers(value: unknown): value is Record<string, number> {
     value !== null &&
     !Array.isArray(value) &&
     Object.values(value as Record<string, unknown>).every((v) => typeof v === "number")
+  );
+}
+
+function isRecordOfStrings(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value as Record<string, unknown>).every((v) => typeof v === "string")
   );
 }
