@@ -1,6 +1,7 @@
 import type { Interaction } from "discord.js";
 
 import { commandRegistry } from "../commands/index.js";
+import { handleJutsuMenuInteraction, isJutsuMenuInteraction } from "../commands/jutsuMenu.js";
 import { DomainError } from "../core/errors.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
@@ -9,7 +10,30 @@ export async function handleInteractionCreate(
   interaction: Interaction,
   services: CommandServices
 ): Promise<void> {
-  if (!interaction.isChatInputCommand() || !interaction.inCachedGuild()) {
+  if (!interaction.inCachedGuild()) {
+    return;
+  }
+
+  if (interaction.isStringSelectMenu() || interaction.isButton()) {
+    if (!isJutsuMenuInteraction(interaction.customId)) {
+      return;
+    }
+
+    try {
+      await handleJutsuMenuInteraction(interaction, services);
+    } catch (error) {
+      console.error("[jutsu-menu]", error);
+      const payload = { content: "Não consegui processar essa ação. Tente novamente.", ephemeral: true };
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(payload);
+      } else {
+        await interaction.reply(payload);
+      }
+    }
+    return;
+  }
+
+  if (!interaction.isChatInputCommand()) {
     return;
   }
 

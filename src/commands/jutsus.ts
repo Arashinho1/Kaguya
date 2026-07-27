@@ -5,80 +5,15 @@ import { formatFormula } from "../core/formula/index.js";
 import { registerModule } from "../core/modules/registry.js";
 import type { CharacterWithWorld } from "../modules/characters/CharacterService.js";
 import { JutsuRuleError } from "../modules/jutsus/JutsuService.js";
+import { buildCategoriesView } from "./jutsuMenu.js";
 import type { CommandServices } from "../types/command.js";
+import { elementEmoji, EMBED_COLOR, rankBadge, rankColor, sortByRank, typeEmoji } from "./jutsuDisplay.js";
 
 registerModule({
   key: "jutsus",
   name: "Jutsus",
   description: "Catálogo de jutsus (sincronizado do site Mundo Ninja), aprendizado e uso com custo de Chakra."
 });
-
-const EMBED_COLOR = 0xff6b1a;
-
-const RANK_ORDER: Record<string, number> = { D: 1, C: 2, B: 3, A: 4, S: 5 };
-
-const RANK_COLOR: Record<string, number> = {
-  D: 0x95a5a6,
-  C: 0x2ecc71,
-  B: 0x3498db,
-  A: 0x9b59b6,
-  S: 0xe74c3c
-};
-
-const RANK_BADGE: Record<string, string> = {
-  D: "⚪",
-  C: "🟢",
-  B: "🔵",
-  A: "🟣",
-  S: "🔴"
-};
-
-const TYPE_EMOJI: Record<string, string> = {
-  ninjutsu: "🌀",
-  "ninjutsu-elemental": "🌪️",
-  taijutsu: "👊",
-  genjutsu: "🌀",
-  "kekkei-genkai": "🧬",
-  fuinjutsu: "🔏",
-  kenjutsu: "🗡️",
-  bukijutsu: "🏹"
-};
-
-const ELEMENT_EMOJI: Record<string, string> = {
-  Katon: "🔥",
-  Suiton: "💧",
-  Raiton: "⚡",
-  Doton: "🪨",
-  Futon: "🌪️",
-  Hyouton: "❄️",
-  Youton: "🌋",
-  Jinton: "💨",
-  Bakuton: "💥",
-  Mokuton: "🌳"
-};
-
-function rankBadge(rank: string | null): string {
-  return rank ? (RANK_BADGE[rank] ?? "⭐") : "❔";
-}
-
-function rankColor(rank: string | null): number {
-  return rank ? (RANK_COLOR[rank] ?? EMBED_COLOR) : EMBED_COLOR;
-}
-
-function typeEmoji(typeKey: string | undefined): string {
-  return (typeKey && TYPE_EMOJI[typeKey]) || "🥷";
-}
-
-function elementEmoji(element: string | null): string {
-  return element ? (ELEMENT_EMOJI[element] ?? "🌊") : "";
-}
-
-function sortByRank<T extends { jutsuRank: string | null; name: string }>(jutsus: T[]): T[] {
-  return [...jutsus].sort((a, b) => {
-    const diff = (RANK_ORDER[a.jutsuRank ?? ""] ?? 0) - (RANK_ORDER[b.jutsuRank ?? ""] ?? 0);
-    return diff !== 0 ? diff : a.name.localeCompare(b.name);
-  });
-}
 
 async function requireActiveCharacter(ctx: {
   guild: Guild;
@@ -114,42 +49,18 @@ export const jutsuCommand = defineCommandGroup<CommandServices>({
   subcommands: [
     defineSubcommand<typeof catalogoArgs, CommandServices>({
       name: "catalogo",
-      description: "Lista os tipos de jutsu e quantos jutsus ativos cada um tem.",
+      description: "Abre o menu interativo de jutsus (categorias → jutsus → detalhes).",
       args: catalogoArgs,
       async handler(ctx) {
-        const [types, jutsus, prefix] = await Promise.all([
-          ctx.services.jutsus.listTypes(ctx.guild),
-          ctx.services.jutsus.listJutsus(ctx.guild),
-          ctx.services.guildConfig.getPrefix(ctx.guild)
-        ]);
-
-        if (types.length === 0) {
+        const view = await buildCategoriesView(ctx.guild, ctx.services.jutsus);
+        if (!view) {
           await ctx.reply(
             "Nenhum tipo de jutsu cadastrado ainda. Peça para a staff rodar `.jutsuadmin sincronizar`."
           );
           return;
         }
 
-        const counts = new Map<string, number>();
-        for (const jutsu of jutsus) {
-          if (!jutsu.typeId) continue;
-          counts.set(jutsu.typeId, (counts.get(jutsu.typeId) ?? 0) + 1);
-        }
-
-        const embed = new EmbedBuilder()
-          .setColor(EMBED_COLOR)
-          .setTitle("🥷 Catálogo de Jutsus")
-          .setDescription(`**${jutsus.length}** jutsus catalogados neste servidor, agrupados por tipo.`)
-          .addFields(
-            types.map((type) => ({
-              name: `${typeEmoji(type.key)} ${type.name}`,
-              value: `\`${type.key}\`\n**${counts.get(type.id) ?? 0}** jutsu(s)`,
-              inline: true
-            }))
-          )
-          .setFooter({ text: `Use ${prefix}jutsu tipo <chave> para explorar um tipo, ou ${prefix}jutsu ver <chave> para ver um jutsu.` });
-
-        await ctx.reply({ embeds: [embed] });
+        await ctx.reply(view);
       }
     }),
 
