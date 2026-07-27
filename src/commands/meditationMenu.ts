@@ -19,6 +19,7 @@ import type { MeditationConfig, MeditationIntervalUnit } from "../modules/jutsus
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
+import { buildScopeView } from "./scopeMenu.js";
 import { BRAND_COLOR } from "./uiConstants.js";
 
 /** Menu de config da meditação (`.meditar config`) — mesmo padrão dos outros menus de
@@ -60,7 +61,12 @@ export async function buildMeditationConfigView(guild: Guild, services: CommandS
     .setLabel("✏️ Editar taxa")
     .setStyle(ButtonStyle.Primary);
 
-  return { embeds: [embed], components: [row(editButton)] };
+  const scopeButton = new ButtonBuilder()
+    .setCustomId(buildId("openScope"))
+    .setLabel("📍 Onde funciona")
+    .setStyle(ButtonStyle.Secondary);
+
+  return { embeds: [embed], components: [row(editButton, scopeButton)] };
 }
 
 function buildEditModal(config: MeditationConfig): ModalBuilder {
@@ -124,9 +130,28 @@ export async function handleMeditationMenuInteraction(interaction: MenuInteracti
     return;
   }
 
-  if (action === "openEditModal" && interaction.isButton()) {
+  if (!interaction.isButton()) {
+    return;
+  }
+
+  if (action === "openEditModal") {
     const config = await services.jutsus.getMeditationConfig(interaction.guild);
     await interaction.showModal(buildEditModal(config));
+    return;
+  }
+
+  if (action === "openScope") {
+    const view = await buildScopeView(interaction.guild, services, "meditar", {
+      customId: buildId("backToConfig"),
+      label: "⬅️ Voltar"
+    });
+    await interaction.update(view);
+    return;
+  }
+
+  if (action === "backToConfig") {
+    const view = await buildMeditationConfigView(interaction.guild, services);
+    await interaction.update(view);
   }
 }
 

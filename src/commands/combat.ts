@@ -4,6 +4,7 @@ import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/comma
 import { registerModule } from "../core/modules/registry.js";
 import type { CharacterWithWorld } from "../modules/characters/CharacterService.js";
 import { CombatRuleError } from "../modules/combat/CombatService.js";
+import { buildScopeView } from "./scopeMenu.js";
 import type { CommandServices } from "../types/command.js";
 
 registerModule({
@@ -150,6 +151,16 @@ export const combatAdminCommand = defineCommandGroup<CommandServices>({
   access: "admin",
   module: "combat",
   subcommands: [
+    defineSubcommand<typeof canaisArgs, CommandServices>({
+      name: "escopo",
+      description: "Menu pra escolher categorias/canais/fóruns/threads onde .duelo funciona.",
+      args: canaisArgs,
+      async handler(ctx) {
+        const view = await buildScopeView(ctx.guild, ctx.services, "duelo");
+        await ctx.reply(view);
+      }
+    }),
+
     defineSubcommand<typeof canalArgs, CommandServices>({
       name: "canaladicionar",
       description: "Permite duelos neste canal.",

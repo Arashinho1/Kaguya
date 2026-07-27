@@ -283,7 +283,7 @@ export async function buildJutsuDetailView(
 // ─── Roteamento de interações ─────────────────────────────────────────────────
 
 export async function handleJutsuMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
-  if (interaction.isModalSubmit()) {
+  if (interaction.isModalSubmit() || interaction.isChannelSelectMenu()) {
     return;
   }
 

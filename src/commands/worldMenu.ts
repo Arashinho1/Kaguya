@@ -375,6 +375,10 @@ export async function handleWorldMenuInteraction(interaction: MenuInteraction, s
     return;
   }
 
+  if (interaction.isChannelSelectMenu()) {
+    return;
+  }
+
   switch (action) {
     case "backToConfig": {
       if (!interaction.isButton()) return;

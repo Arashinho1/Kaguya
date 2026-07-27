@@ -14,7 +14,12 @@ export async function handleInteractionCreate(
     return;
   }
 
-  if (interaction.isStringSelectMenu() || interaction.isButton() || interaction.isModalSubmit()) {
+  if (
+    interaction.isStringSelectMenu() ||
+    interaction.isChannelSelectMenu() ||
+    interaction.isButton() ||
+    interaction.isModalSubmit()
+  ) {
     try {
       await menuRegistry.dispatch(interaction, services);
     } catch (error) {

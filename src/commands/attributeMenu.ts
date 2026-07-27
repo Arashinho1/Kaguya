@@ -240,6 +240,10 @@ export async function handleAttributeMenuInteraction(interaction: MenuInteractio
     return;
   }
 
+  if (interaction.isChannelSelectMenu()) {
+    return;
+  }
+
   switch (action) {
     case "openCreateModal": {
       if (!interaction.isButton()) return;

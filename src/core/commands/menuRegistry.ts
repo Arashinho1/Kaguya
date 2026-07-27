@@ -1,9 +1,15 @@
-import type { ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from "discord.js";
+import type {
+  ButtonInteraction,
+  ChannelSelectMenuInteraction,
+  ModalSubmitInteraction,
+  StringSelectMenuInteraction
+} from "discord.js";
 
 import { parseCustomId } from "./customId.js";
 
 export type MenuInteraction =
   | StringSelectMenuInteraction<"cached">
+  | ChannelSelectMenuInteraction<"cached">
   | ButtonInteraction<"cached">
   | ModalSubmitInteraction<"cached">;
 

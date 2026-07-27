@@ -40,6 +40,10 @@ export const meditateCommand = defineCommandGroup<CommandServices>({
           return;
         }
 
+        if (!(await ctx.services.jutsus.isMeditationChannelAllowed(ctx.guild, ctx.channelId))) {
+          throw new JutsuRuleError("Meditação não é permitida neste canal.");
+        }
+
         const result = await ctx.services.jutsus.meditate(ctx.guild, character);
 
         if (result.alreadyFull) {

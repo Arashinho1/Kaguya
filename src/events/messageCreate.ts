@@ -81,6 +81,10 @@ async function handleNarratedJutsuUse(message: Message<true>, services: CommandS
     return;
   }
 
+  if (!(await services.jutsus.isNarrationChannelAllowed(message.guild, message.channelId))) {
+    return;
+  }
+
   for (const text of identifiers) {
     const jutsu = await services.jutsus.findJutsuFuzzy(message.guild, text);
     if (!jutsu) {

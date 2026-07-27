@@ -414,6 +414,10 @@ async function handleFichaMenuInteraction(interaction: MenuInteraction, services
     return;
   }
 
+  if (interaction.isChannelSelectMenu()) {
+    return;
+  }
+
   switch (action) {
     case "openCreateModal": {
       if (!interaction.isButton()) return;

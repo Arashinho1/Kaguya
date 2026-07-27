@@ -2,6 +2,7 @@ import type { Guild } from "discord.js";
 
 import { DomainError } from "../../core/errors.js";
 import type { DuelEncounter, Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { isChannelInScope } from "../../services/channelScope.js";
 import type { CharacterWithWorld } from "../characters/CharacterService.js";
 import type { EconomyService } from "../economy/EconomyService.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
@@ -17,16 +18,24 @@ export class CombatService {
     private readonly economy: EconomyService
   ) {}
 
-  // ─── Canais permitidos ───────────────────────────────────────────────────
+  // ─── Canais/categorias/fóruns permitidos ────────────────────────────────
 
   public async getAllowedChannelIds(guild: Guild): Promise<string[]> {
     const value = await this.guildConfig.getSetting(guild, ALLOWED_CHANNELS_KEY);
     return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
   }
 
+  /**
+   * Vazio = nada liberado (comportamento já existente antes do escopo por local: staff
+   * precisa designar pelo menos um lugar antes de duelos funcionarem). Uma categoria ou
+   * fórum liberado libera automaticamente tudo dentro (canais, threads/posts).
+   */
   public async isChannelAllowed(guild: Guild, channelId: string): Promise<boolean> {
     const allowed = await this.getAllowedChannelIds(guild);
-    return allowed.includes(channelId);
+    if (allowed.length === 0) return false;
+
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    return isChannelInScope(channel, allowed);
   }
 
   public async addAllowedChannel(guild: Guild, actorId: string, channelId: string): Promise<string[]> {
@@ -42,11 +51,16 @@ export class CombatService {
     return next;
   }
 
+  /** Substitui a lista inteira — usado pelo select de canal/categoria/fórum (`.combateadmin escopo`). */
+  public async setAllowedChannelIds(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
+    await this.saveAllowedChannels(guild, actorId, channelIds);
+  }
+
   private async saveAllowedChannels(guild: Guild, actorId: string, channelIds: string[]): Promise<void> {
     await this.guildConfig.setSetting(guild, actorId, {
       key: ALLOWED_CHANNELS_KEY,
-      label: "Canais de duelo",
-      description: "Canais onde .duelo pode ser iniciado.",
+      label: "Onde o duelo funciona",
+      description: "Categorias, canais, fóruns e threads onde .duelo pode ser iniciado.",
       value: channelIds as unknown as Prisma.InputJsonValue,
       valueType: "JSON",
       isPublic: false
