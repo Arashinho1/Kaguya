@@ -154,6 +154,9 @@ model CharacterProgress {
   characterId    String   @unique
   trainingPoints Int      @default(0)
   currentChakra  Int?
+  /** Quando currentChakra foi atualizado por último (gasto ou recuperado) — usado pra
+   * calcular a regeneração por meditação proporcional ao tempo real decorrido. */
+  chakraSyncedAt DateTime?
   currency       Int      @default(0)
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now())

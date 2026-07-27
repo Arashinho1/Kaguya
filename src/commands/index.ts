@@ -6,6 +6,7 @@ import { combatAdminCommand, duelCommand } from "./combat.js";
 import { economyAdminCommand, economyCommand } from "./economy.js";
 import { helpCommand } from "./help.js";
 import { jutsuAdminCommand, jutsuCommand } from "./jutsus.js";
+import { meditateCommand } from "./meditation.js";
 import { periciaAdminCommand, periciasCommand } from "./pericias.js";
 import { setupCommand } from "./setup.js";
 import { paCommand, trainingCommand } from "./training.js";
@@ -25,6 +26,7 @@ for (const command of [
   periciaAdminCommand,
   jutsuCommand,
   jutsuAdminCommand,
+  meditateCommand,
   duelCommand,
   combatAdminCommand,
   economyCommand,

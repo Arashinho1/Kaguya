@@ -21,7 +21,27 @@ export class JutsuRuleError extends DomainError {}
 const CHAKRA_COST_BY_RANK_KEY = "jutsuChakraCostByRank";
 const XP_PER_USE_KEY = "jutsuXpPerUse";
 const AUTO_SYNC_KEY = "jutsuAutoSyncEnabled";
+const MEDITATION_CONFIG_KEY = "meditationConfig";
 const DEFAULT_XP_PER_USE = 4;
+
+export type MeditationIntervalUnit = "minute" | "hour";
+
+export interface MeditationConfig {
+  ratePercent: number;
+  intervalUnit: MeditationIntervalUnit;
+}
+
+/** Só usada até o servidor configurar a própria taxa — totalmente substituível. */
+const DEFAULT_MEDITATION_CONFIG: MeditationConfig = { ratePercent: 10, intervalUnit: "hour" };
+const INTERVAL_MS: Record<MeditationIntervalUnit, number> = { minute: 60_000, hour: 3_600_000 };
+
+export interface MeditateResult {
+  recovered: number;
+  chakraBefore: number;
+  chakraAfter: number;
+  maxChakra: number;
+  alreadyFull: boolean;
+}
 
 /** Só usada quando o servidor ainda não configurou nenhuma tabela — totalmente substituível. */
 const DEFAULT_CHAKRA_COST_FORMULA: FormulaNode = f.lookup(
@@ -311,6 +331,78 @@ export class JutsuService {
     });
   }
 
+  // ─── Meditação (recuperação de chakra) ─────────────────────────────────────
+
+  public async getMeditationConfig(guild: Guild): Promise<MeditationConfig> {
+    const raw = await this.guildConfig.getSetting(guild, MEDITATION_CONFIG_KEY);
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const { ratePercent, intervalUnit } = raw as Record<string, unknown>;
+      if (typeof ratePercent === "number" && ratePercent > 0 && (intervalUnit === "minute" || intervalUnit === "hour")) {
+        return { ratePercent, intervalUnit };
+      }
+    }
+    return DEFAULT_MEDITATION_CONFIG;
+  }
+
+  public async setMeditationConfig(guild: Guild, actorId: string, config: MeditationConfig): Promise<void> {
+    if (!(config.ratePercent > 0)) {
+      throw new JutsuRuleError("O percentual precisa ser maior que 0.");
+    }
+
+    await this.guildConfig.setSetting(guild, actorId, {
+      key: MEDITATION_CONFIG_KEY,
+      label: "Regeneração de Chakra por meditação",
+      description: "Percentual do chakra total recuperado por minuto/hora ao usar .meditar.",
+      value: config as unknown as Prisma.InputJsonValue,
+      valueType: "JSON",
+      isPublic: true
+    });
+  }
+
+  /**
+   * Recupera chakra proporcional ao tempo real desde a última mudança confiável
+   * (chakraSyncedAt, atualizado tanto aqui quanto em useJutsu). Sem sessão pra "começar"
+   * ou "parar" — é só matemática de tempo decorrido, então chamar o comando de novo cedo
+   * demais não rouba nem ganha nada (só continua contando a partir do mesmo ponto).
+   */
+  public async meditate(guild: Guild, character: CharacterWithWorld): Promise<MeditateResult> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+    const view = await this.characters.getCharacterView(guild, character);
+    const maxChakra = view.chakra;
+
+    const progress = await this.prisma.characterProgress.upsert({
+      where: { characterId: character.id },
+      update: {},
+      create: { guildId: rpgGuild.id, characterId: character.id }
+    });
+
+    if (progress.currentChakra === null || progress.currentChakra >= maxChakra) {
+      return { recovered: 0, chakraBefore: maxChakra, chakraAfter: maxChakra, maxChakra, alreadyFull: true };
+    }
+
+    const config = await this.getMeditationConfig(guild);
+    const now = new Date();
+    const since = progress.chakraSyncedAt ?? progress.updatedAt;
+    const elapsedMs = Math.max(0, now.getTime() - since.getTime());
+    const elapsedUnits = elapsedMs / INTERVAL_MS[config.intervalUnit];
+
+    const chakraBefore = progress.currentChakra;
+    const recoveredRaw = Math.floor(maxChakra * (config.ratePercent / 100) * elapsedUnits);
+    const chakraAfter = Math.min(maxChakra, chakraBefore + Math.max(0, recoveredRaw));
+    const recovered = chakraAfter - chakraBefore;
+
+    // Só marca o "relógio" como reiniciado se de fato recuperou algo — senão, chamar o
+    // comando repetidas vezes cedo demais reseta a contagem e nunca acumula tempo suficiente.
+    if (recovered > 0) {
+      await this.prisma.characterProgress.update({
+        where: { id: progress.id },
+        data: { currentChakra: chakraAfter, chakraSyncedAt: now }
+      });
+    }
+
+    return { recovered, chakraBefore, chakraAfter, maxChakra, alreadyFull: chakraAfter >= maxChakra };
+  }
+
   // ─── Ficha: aprender e usar ─────────────────────────────────────────────────
 
   public async listLearnedJutsus(character: CharacterWithWorld): Promise<(CharacterJutsu & { jutsu: JutsuDefinition })[]> {
@@ -395,7 +487,9 @@ export class JutsuService {
 
     await this.prisma.characterProgress.update({
       where: { id: progress.id },
-      data: { currentChakra: chakraAfter }
+      // chakraSyncedAt marca "última vez que currentChakra foi um número confiável" — a
+      // meditação usa isso pra saber quanto tempo real se passou desde então (ver meditate()).
+      data: { currentChakra: chakraAfter, chakraSyncedAt: new Date() }
     });
 
     await this.prisma.jutsuUseLog.create({

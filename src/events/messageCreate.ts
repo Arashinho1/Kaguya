@@ -61,13 +61,13 @@ export async function handleMessageCreate(message: Message, services: CommandSer
 }
 
 /**
- * Detecção narrada de jutsu: só age se o autor tiver um duelo ATIVO neste canal — em
- * qualquer outro contexto, texto entre colchetes é só... texto entre colchetes. Nenhum
- * match não é erro (RP livre não deve ser punido); um jutsu reconhecido mas que falhou
- * (não aprendido, chakra insuficiente) vira uma resposta curta.
+ * Detecção narrada de jutsu: age em qualquer canal, não só dentro de um `.duelo` formal —
+ * luta narrada acontece o tempo todo fora de duelo estruturado, então não faz sentido travar
+ * a detecção a isso. Nenhum match não é erro (RP livre não deve ser punido); um jutsu
+ * reconhecido mas que falhou (não aprendido, chakra insuficiente) vira uma resposta curta.
  */
 async function handleNarratedJutsuUse(message: Message<true>, services: CommandServices): Promise<void> {
-  if (!(await services.guildConfig.isModuleEnabled(message.guild, "combat").catch(() => true))) {
+  if (!(await services.guildConfig.isModuleEnabled(message.guild, "jutsus").catch(() => true))) {
     return;
   }
 
@@ -78,11 +78,6 @@ async function handleNarratedJutsuUse(message: Message<true>, services: CommandS
 
   const character = await services.characters.getActiveCharacter(message.guild, message.author.id);
   if (!character) {
-    return;
-  }
-
-  const duel = await services.combat.getActiveDuelInChannel(message.guild, message.channelId);
-  if (!duel || (duel.challengerCharacterId !== character.id && duel.opponentCharacterId !== character.id)) {
     return;
   }
 
