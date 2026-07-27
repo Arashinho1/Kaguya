@@ -1,6 +1,6 @@
 import { CommandRegistry } from "../core/commands/index.js";
 import type { CommandServices } from "../types/command.js";
-import { attributeAdminCommand, attributesCommand } from "./attributes.js";
+import { attributeAdminCommand } from "./attributes.js";
 import { characterCommand } from "./characters.js";
 import { combatAdminCommand, duelCommand } from "./combat.js";
 import { economyAdminCommand, economyCommand } from "./economy.js";
@@ -16,7 +16,6 @@ export const commandRegistry = new CommandRegistry<CommandServices>();
 for (const command of [
   setupCommand,
   helpCommand,
-  attributesCommand,
   attributeAdminCommand,
   characterCommand,
   worldCommand,

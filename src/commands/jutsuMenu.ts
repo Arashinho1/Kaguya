@@ -154,7 +154,8 @@ export async function buildJutsuListView(
   guild: Guild,
   jutsuService: JutsuService,
   typeKey: string,
-  rankFilter: string
+  rankFilter: string,
+  page = 0
 ): Promise<InteractiveView | null> {
   const type = await jutsuService.findType(guild, typeKey);
   if (!type) return null;
@@ -169,19 +170,23 @@ export async function buildJutsuListView(
 
   if (filtered.length === 0) return null;
 
-  const shown = sortByRank(filtered).slice(0, MAX_OPTIONS);
+  const sorted = sortByRank(filtered);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / MAX_OPTIONS));
+  const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
+  const shown = sorted.slice(currentPage * MAX_OPTIONS, (currentPage + 1) * MAX_OPTIONS);
+
   const rankLabel = rankFilter === RANK_ALL ? "" : ` — Rank ${rankFilter === RANK_NONE ? "?" : rankFilter}`;
 
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setTitle(`${typeEmoji(type.key)} ${type.name}${rankLabel}`)
     .setDescription(
-      `Escolha um jutsu abaixo para ver os detalhes.` +
-        (filtered.length > shown.length ? `\n_(mostrando ${shown.length} de ${filtered.length})_` : "")
+      `Escolha um jutsu abaixo para ver os detalhes. **${sorted.length}** jutsu(s) no total.` +
+        (totalPages > 1 ? `\n_Página ${currentPage + 1} de ${totalPages}_` : "")
     );
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(buildId("selectJutsu", type.key, rankFilter))
+    .setCustomId(buildId("selectJutsu", type.key, rankFilter, String(currentPage)))
     .setPlaceholder("Escolha um jutsu...")
     .addOptions(
       shown.map((jutsu) =>
@@ -198,7 +203,27 @@ export async function buildJutsuListView(
       ? button("showCategories", "⬅️ Categorias", ButtonStyle.Secondary)
       : button("showRanks", "⬅️ Ranks", ButtonStyle.Secondary, type.key);
 
-  return { embeds: [embed], components: [row(select), row(backButton)] };
+  const components = [row(select)];
+
+  if (totalPages > 1) {
+    components.push(
+      row(
+        button("prevPage", "◀️ Anterior", ButtonStyle.Secondary, type.key, rankFilter, String(currentPage)).setDisabled(
+          currentPage <= 0
+        ),
+        button("pageIndicator", `Página ${currentPage + 1}/${totalPages}`, ButtonStyle.Secondary, String(currentPage)).setDisabled(
+          true
+        ),
+        button("nextPage", "▶️ Próxima", ButtonStyle.Secondary, type.key, rankFilter, String(currentPage)).setDisabled(
+          currentPage >= totalPages - 1
+        )
+      )
+    );
+  }
+
+  components.push(row(backButton));
+
+  return { embeds: [embed], components };
 }
 
 export async function buildJutsuDetailView(
@@ -206,7 +231,8 @@ export async function buildJutsuDetailView(
   jutsuService: JutsuService,
   jutsuKey: string,
   typeKey: string,
-  rankFilter: string
+  rankFilter: string,
+  page = 0
 ): Promise<InteractiveView | null> {
   const jutsu = await jutsuService.findJutsu(guild, jutsuKey);
   if (!jutsu) return null;
@@ -234,7 +260,7 @@ export async function buildJutsuDetailView(
   embed.setFooter({ text: `Chave: ${jutsu.key}` });
 
   const actionRow = row(
-    button("showList", "⬅️ Voltar", ButtonStyle.Secondary, typeKey, rankFilter),
+    button("showList", "⬅️ Voltar", ButtonStyle.Secondary, typeKey, rankFilter, String(page)),
     button("learn", "📘 Aprender", ButtonStyle.Success, jutsu.key),
     button("use", "✨ Usar", ButtonStyle.Primary, jutsu.key)
   );
@@ -285,13 +311,31 @@ export async function handleJutsuMenuInteraction(interaction: MenuInteraction, s
     }
 
     case "selectJutsu": {
-      const [typeKey, rankFilter] = parts;
+      const [typeKey, rankFilter, pageStr] = parts;
       if (!typeKey || !rankFilter || !selected) return;
       // Buscar/reenviar a imagem pode passar da janela de 3s de ack de interação —
       // adia a resposta antes de montar a view em vez de arriscar "This interaction failed".
       await interaction.deferUpdate();
-      const view = await buildJutsuDetailView(interaction.guild, services.jutsus, selected, typeKey, rankFilter);
+      const view = await buildJutsuDetailView(
+        interaction.guild,
+        services.jutsus,
+        selected,
+        typeKey,
+        rankFilter,
+        Number(pageStr) || 0
+      );
       await editOrFallback(interaction, view);
+      return;
+    }
+
+    case "prevPage":
+    case "nextPage": {
+      const [typeKey, rankFilter, pageStr] = parts;
+      if (!typeKey || !rankFilter) return;
+      const currentPage = Number(pageStr) || 0;
+      const nextPage = action === "prevPage" ? currentPage - 1 : currentPage + 1;
+      const view = await buildJutsuListView(interaction.guild, services.jutsus, typeKey, rankFilter, nextPage);
+      await updateOrFallback(interaction, view);
       return;
     }
 
@@ -310,9 +354,9 @@ export async function handleJutsuMenuInteraction(interaction: MenuInteraction, s
     }
 
     case "showList": {
-      const [typeKey, rankFilter] = parts;
+      const [typeKey, rankFilter, pageStr] = parts;
       if (!typeKey || !rankFilter) return;
-      const view = await buildJutsuListView(interaction.guild, services.jutsus, typeKey, rankFilter);
+      const view = await buildJutsuListView(interaction.guild, services.jutsus, typeKey, rankFilter, Number(pageStr) || 0);
       await updateOrFallback(interaction, view);
       return;
     }

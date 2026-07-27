@@ -1,7 +1,7 @@
 import type { Guild } from "discord.js";
 
 import * as f from "../../core/formula/builders.js";
-import { evaluateFormula, safeParseFormula, type FormulaNode } from "../../core/formula/index.js";
+import { evaluateFormula, safeParseFormula, type FormulaContext, type FormulaNode } from "../../core/formula/index.js";
 import { DomainError } from "../../core/errors.js";
 import { Prisma, type AttributeDefinition, type PrismaClient } from "../../generated/prisma/client.js";
 import type { GuildConfigService } from "../guild-config/GuildConfigService.js";
@@ -202,8 +202,28 @@ export class AttributeService {
     return formula;
   }
 
-  public calculateChakra(attributes: Record<string, number>, formula: FormulaNode): number {
-    return Math.max(0, Math.floor(evaluateFormula(formula, attributes)));
+  public calculateChakra(context: FormulaContext, formula: FormulaNode): number {
+    return Math.max(0, Math.floor(evaluateFormula(formula, context)));
+  }
+
+  /** Tabela atual de chakra fixo por rank, se a fórmula em uso for esse formato (lookup em "rank"). */
+  public async getChakraRankTable(guild: Guild): Promise<Record<string, number>> {
+    const formula = await this.getChakraFormula(guild);
+    return formula.op === "lookup" && formula.key === "rank" ? { ...formula.table } : {};
+  }
+
+  /**
+   * Define/atualiza o valor de chakra de um único rank, preservando os demais já
+   * configurados. Se a fórmula atual não for uma lookup por rank, começa uma nova
+   * (substitui qualquer fórmula por soma-ponderada configurada antes).
+   */
+  public async setChakraRankValue(guild: Guild, actorId: string, rankKey: string, value: number): Promise<FormulaNode> {
+    const table = await this.getChakraRankTable(guild);
+    table[rankKey] = value;
+
+    const formula = f.lookup("rank", table);
+    await this.setChakraFormula(guild, actorId, formula);
+    return formula;
   }
 }
 

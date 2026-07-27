@@ -225,7 +225,11 @@ export class CharacterService {
     });
 
     const chakraFormula = await this.attributes.getChakraFormula(guild);
-    const chakra = this.attributes.calculateChakra(attributeValues, chakraFormula) + (combinedBonuses.chakra ?? 0);
+    const chakraContext: Record<string, number | string> = { ...attributeValues };
+    if (character.rank?.key) {
+      chakraContext.rank = character.rank.key;
+    }
+    const chakra = this.attributes.calculateChakra(chakraContext, chakraFormula) + (combinedBonuses.chakra ?? 0);
 
     return { character, attributes: attributeViews, chakra };
   }

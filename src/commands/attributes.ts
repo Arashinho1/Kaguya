@@ -1,10 +1,18 @@
 import { EmbedBuilder } from "discord.js";
 
-import { defineCommand, defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
+import {
+  defineCommandGroup,
+  defineSubcommand,
+  type ArgDef,
+  type CommandContext
+} from "../core/commands/index.js";
 import { formatFormula } from "../core/formula/index.js";
 import { registerModule } from "../core/modules/registry.js";
 import { AttributeRuleError } from "../modules/attributes/AttributeService.js";
+import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
+import { buildAttributeConfigView } from "./attributeMenu.js";
+import { buildCreatePromptView, buildFichaView } from "./fichaMenu.js";
 
 registerModule({
   key: "attributes",
@@ -12,33 +20,20 @@ registerModule({
   description: "Atributos configuráveis por servidor e a fórmula de Chakra derivada deles."
 });
 
-export const attributesCommand = defineCommand<readonly [], CommandServices>({
-  name: "atributos",
-  aliases: ["attrs"],
-  description: "Mostra os atributos configurados neste RPG.",
-  access: "member",
-  module: "attributes",
-  async handler(ctx) {
-    const [attributes, chakraFormula] = await Promise.all([
-      ctx.services.attributes.listAttributes(ctx.guild),
-      ctx.services.attributes.getChakraFormula(ctx.guild)
-    ]);
-
-    const embed = new EmbedBuilder().setTitle("Atributos do servidor");
-
-    if (attributes.length === 0) {
-      embed.setDescription("Nenhum atributo ativo configurado ainda. Peça para a staff usar `.atributo criar`.");
-    } else {
-      embed.setDescription(
-        attributes.map((attr) => `**${attr.name}** \`[${attr.key}]\` — base ${attr.baseValue}`).join("\n")
-      );
-    }
-
-    embed.addFields({ name: "Fórmula de Chakra", value: `\`${formatFormula(chakraFormula)}\`` });
-
-    await ctx.reply({ embeds: [embed] });
+/**
+ * `.atributo`/`.attr` é hoje um atalho pra ficha (`ver`, padrão) mais a configuração
+ * de admin (`config` e os subcomandos legados abaixo). O grupo inteiro precisa ser
+ * `access: "member"` pra o atalho funcionar pra qualquer um — os subcomandos de
+ * configuração se auto-protegem com este guard em vez de depender do access do grupo.
+ */
+async function requireAdmin<TArgs extends readonly ArgDef[]>(
+  ctx: CommandContext<TArgs, CommandServices>
+): Promise<void> {
+  const allowed = await canUseCommandAccess("admin", ctx.member, ctx.source.client, ctx.services.guildConfig);
+  if (!allowed) {
+    throw new AttributeRuleError("Você precisa ter Administrador ou Gerenciar Servidor para configurar atributos.");
   }
-});
+}
 
 const EDIT_FIELDS = ["nome", "descricao", "base", "min", "max", "ordem"] as const;
 
@@ -82,16 +77,46 @@ const chakraArgs = [
 
 export const attributeAdminCommand = defineCommandGroup<CommandServices>({
   name: "atributo",
-  aliases: ["attr"],
-  description: "Configura atributos do RPG neste servidor.",
-  access: "admin",
+  aliases: ["attr", "atributos", "attrs"],
+  description: "Mostra sua ficha (atalho) ou configura os atributos do RPG neste servidor.",
+  access: "member",
   module: "attributes",
+  defaultSubcommand: "ver",
   subcommands: [
+    defineSubcommand<typeof listarArgs, CommandServices>({
+      name: "ver",
+      description: "Atalho para o menu da sua ficha (atributos, chakra, clã/vila).",
+      args: listarArgs,
+      async handler(ctx) {
+        const character = await ctx.services.characters.getActiveCharacter(ctx.guild, ctx.user.id);
+
+        if (!character) {
+          await ctx.reply(buildCreatePromptView());
+          return;
+        }
+
+        const view = await buildFichaView(ctx.guild, character, ctx.services, true);
+        await ctx.reply(view);
+      }
+    }),
+
+    defineSubcommand<typeof listarArgs, CommandServices>({
+      name: "config",
+      description: "Abre o menu de configuração de atributos (staff).",
+      args: listarArgs,
+      async handler(ctx) {
+        await requireAdmin(ctx);
+        const view = await buildAttributeConfigView(ctx.guild, ctx.services);
+        await ctx.reply(view);
+      }
+    }),
+
     defineSubcommand<typeof listarArgs, CommandServices>({
       name: "listar",
       description: "Lista todos os atributos (ativos e inativos).",
       args: listarArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const attributes = await ctx.services.attributes.listAttributes(ctx.guild, { includeInactive: true });
 
         if (attributes.length === 0) {
@@ -115,6 +140,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Cria um novo atributo (ajuste base/min/max depois com editar).",
       args: criarArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const created = await ctx.services.attributes.createAttribute(ctx.guild, ctx.user.id, {
           key: ctx.args.chave,
           name: ctx.args.nome
@@ -129,6 +155,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Edita nome, descrição, base, min, max ou ordem de um atributo.",
       args: editarArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const update = buildUpdateFromField(ctx.args.campo, ctx.args.valor);
         const updated = await ctx.services.attributes.updateAttribute(ctx.guild, ctx.user.id, ctx.args.chave, update);
 
@@ -145,6 +172,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Reativa um atributo desativado.",
       args: chaveArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const updated = await ctx.services.attributes.updateAttribute(ctx.guild, ctx.user.id, ctx.args.chave, {
           isActive: true
         });
@@ -162,6 +190,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Desativa um atributo (deixa de aparecer para jogadores).",
       args: chaveArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const updated = await ctx.services.attributes.updateAttribute(ctx.guild, ctx.user.id, ctx.args.chave, {
           isActive: false
         });
@@ -179,6 +208,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Remove definitivamente um atributo.",
       args: removerArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         if (!ctx.args.confirmar) {
           await ctx.reply("Remoção cancelada — confirme com `confirmar: sim` para remover de verdade.");
           return;
@@ -199,6 +229,7 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
       description: "Configura a fórmula de Chakra (soma ponderada de atributos).",
       args: chakraArgs,
       async handler(ctx) {
+        await requireAdmin(ctx);
         const formula = await ctx.services.attributes.setWeightedSumChakraFormula(ctx.guild, ctx.user.id, {
           sourceAttributeKeys: ctx.args.atributos
             .split(",")
