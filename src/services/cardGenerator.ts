@@ -25,7 +25,8 @@ function ensureFontsRegistered(): void {
 const WIDTH = 960;
 const HEIGHT = 540;
 const ACCENT = "#ff6b1a";
-const ACCENT_SOFT = "rgba(255, 107, 26, 0.35)";
+const ACCENT_SOFT = "rgba(255, 107, 26, 0.45)";
+const PANEL_FILL = "rgba(8, 5, 12, 0.45)";
 
 export interface CardAttribute {
   name: string;
@@ -59,6 +60,12 @@ export async function renderFichaCard(params: CardParams): Promise<Buffer> {
 
   await drawBackground(ctx, params.backgroundUrl);
   drawOverlay(ctx);
+  // Fundos de usuário podem ser claros ou muito "cheios" (ver feedback de visibilidade) —
+  // painéis semi-opacos atrás do texto garantem contraste mínimo independente da imagem.
+  drawPanel(ctx, 24, 24, WIDTH - 48, 196, 24);
+  if (params.attributes.length > 0) {
+    drawPanel(ctx, 24, 226, WIDTH - 48, HEIGHT - 226 - 24, 24);
+  }
   await drawAvatarAndHeader(ctx, params);
   drawChakraStat(ctx, params.chakra, params.trainingPoints);
   drawAttributeBars(ctx, params.attributes, params.sectionLabel);
@@ -100,9 +107,9 @@ async function drawBackground(ctx: SKRSContext2D, backgroundUrl: string | null):
 
 function drawOverlay(ctx: SKRSContext2D): void {
   const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  gradient.addColorStop(0, "rgba(10, 6, 14, 0.55)");
-  gradient.addColorStop(0.45, "rgba(10, 6, 14, 0.55)");
-  gradient.addColorStop(1, "rgba(6, 4, 10, 0.92)");
+  gradient.addColorStop(0, "rgba(8, 5, 12, 0.45)");
+  gradient.addColorStop(0.45, "rgba(8, 5, 12, 0.45)");
+  gradient.addColorStop(1, "rgba(5, 3, 8, 0.8)");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 }
@@ -115,6 +122,26 @@ function roundRectPath(ctx: SKRSContext2D, x: number, y: number, w: number, h: n
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** Painel semi-opaco atrás de uma seção do card — dá contraste consistente pro
+ * texto/barras em cima, mesmo com um fundo de usuário claro ou muito detalhado. */
+function drawPanel(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.save();
+  ctx.fillStyle = PANEL_FILL;
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Sombra suave atrás de texto — reforça a legibilidade em cima de qualquer fundo/painel. */
+function withTextShadow(ctx: SKRSContext2D, draw: () => void): void {
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
+  draw();
+  ctx.restore();
 }
 
 function drawFrame(ctx: SKRSContext2D): void {
@@ -156,10 +183,10 @@ async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Prom
 
   const textX = cx + radius + 34;
 
-  ctx.fillStyle = "#ffffff";
   ctx.font = `bold 42px "${FONT_BOLD}"`;
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(params.characterName, textX, 108);
+  ctx.fillStyle = "#ffffff";
+  withTextShadow(ctx, () => ctx.fillText(params.characterName, textX, 108));
 
   let badgeX = textX;
   const badgeY = 128;
@@ -183,7 +210,7 @@ async function drawAvatarAndHeader(ctx: SKRSContext2D, params: CardParams): Prom
     ctx.stroke();
 
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, badgeX + paddingX, badgeY + 23);
+    withTextShadow(ctx, () => ctx.fillText(label, badgeX + paddingX, badgeY + 23));
 
     badgeX += badgeWidth + 12;
   }
@@ -193,17 +220,17 @@ function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: numb
   ctx.textAlign = "right";
 
   ctx.font = `600 18px "${FONT_SEMIBOLD}"`;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.fillText("CHAKRA", WIDTH - 40, 60);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  withTextShadow(ctx, () => ctx.fillText("CHAKRA", WIDTH - 40, 60));
 
   ctx.font = `bold 56px "${FONT_BOLD}"`;
   ctx.fillStyle = ACCENT;
-  ctx.fillText(String(chakra), WIDTH - 40, 112);
+  withTextShadow(ctx, () => ctx.fillText(String(chakra), WIDTH - 40, 112));
 
   if (trainingPoints !== null) {
     ctx.font = `600 16px "${FONT_SEMIBOLD}"`;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
-    ctx.fillText(`• Pontos livres: ${trainingPoints}`, WIDTH - 40, 140);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+    withTextShadow(ctx, () => ctx.fillText(`• Pontos livres: ${trainingPoints}`, WIDTH - 40, 140));
   }
 
   ctx.textAlign = "left";
@@ -216,7 +243,7 @@ function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sect
   if (sectionLabel) {
     ctx.font = `600 22px "${FONT_SEMIBOLD}"`;
     ctx.fillStyle = ACCENT;
-    ctx.fillText(sectionLabel, 60, 228);
+    withTextShadow(ctx, () => ctx.fillText(sectionLabel, 60, 228));
   }
 
   // Só considera atributos sem maxValue próprio pra não deixar um atributo com teto alto
@@ -240,17 +267,21 @@ function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sect
 
     ctx.font = `600 20px "${FONT_SEMIBOLD}"`;
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(attr.name, x, y);
+    withTextShadow(ctx, () => ctx.fillText(attr.name, x, y));
 
     ctx.textAlign = "right";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-    ctx.fillText(String(attr.value), x + colWidth, y);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    withTextShadow(ctx, () => ctx.fillText(String(attr.value), x + colWidth, y));
     ctx.textAlign = "left";
 
     const trackY = y + 12;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
     roundRectPath(ctx, x, trackY, colWidth, barHeight, barHeight / 2);
     ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, x, trackY, colWidth, barHeight, barHeight / 2);
+    ctx.stroke();
 
     if (ratio > 0) {
       const fillGradient = ctx.createLinearGradient(x, 0, x + colWidth, 0);
