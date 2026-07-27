@@ -140,11 +140,16 @@ export class CharacterService {
     }
 
     if (kind === "cla") {
+      if (character.clanId) {
+        throw new CharacterRuleError(
+          "Sua ficha já tem um clã escolhido — a escolha é definitiva. Se foi engano, peça pra staff usar `.ficha resetar`."
+        );
+      }
       const clan = await this.world.findClan(guild, name);
       if (!clan || !clan.isActive) {
         throw new CharacterRuleError(`Não encontrei o clã **${name}** (ou ele está desativado).`);
       }
-      if (clan.memberLimit !== null && character.clanId !== clan.id) {
+      if (clan.memberLimit !== null) {
         const count = await this.world.countActiveCharactersInClan(clan.id);
         if (count >= clan.memberLimit) {
           throw new CharacterRuleError(`O clã **${clan.name}** já atingiu o limite de ${clan.memberLimit} membros.`);
@@ -154,6 +159,11 @@ export class CharacterService {
     }
 
     if (kind === "vila") {
+      if (character.villageId) {
+        throw new CharacterRuleError(
+          "Sua ficha já tem uma vila escolhida — a escolha é definitiva. Se foi engano, peça pra staff usar `.ficha resetar`."
+        );
+      }
       const village = await this.world.findVillage(guild, name);
       if (!village || !village.isActive) {
         throw new CharacterRuleError(`Não encontrei a vila **${name}** (ou ela está desativada).`);
@@ -177,6 +187,44 @@ export class CharacterService {
       data,
       include: WORLD_INCLUDE
     });
+  }
+
+  /**
+   * Ação de staff: uma vez escolhido, clã/vila somem do menu da própria ficha (o jogador
+   * não pode trocar sozinho) — isto é a "volta atrás" pra quando a escolha foi um engano.
+   * Os bônus de clã/vila não precisam de limpeza separada: getCharacterView já os recalcula
+   * ao vivo a partir de character.clan/character.village, então zerar o vínculo já remove
+   * o bônus automaticamente na próxima leitura.
+   */
+  public async clearWorldLinks(
+    guild: Guild,
+    actorId: string,
+    character: CharacterWithWorld,
+    kind: "cla" | "vila" | "ambos"
+  ): Promise<CharacterWithWorld> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+
+    const data: { clanId?: null; villageId?: null } = {};
+    if (kind === "cla" || kind === "ambos") data.clanId = null;
+    if (kind === "vila" || kind === "ambos") data.villageId = null;
+
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data,
+      include: WORLD_INCLUDE
+    });
+
+    await this.guildConfig.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId,
+      action: "character.worldLinks.clear",
+      targetType: "Character",
+      targetId: character.id,
+      before: { clanId: character.clanId, villageId: character.villageId },
+      after: { kind }
+    });
+
+    return updated;
   }
 
   public async setBackground(

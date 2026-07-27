@@ -1,10 +1,11 @@
 import { Message } from "discord.js";
 
-import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
+import { defineCommandGroup, defineSubcommand, type ArgDef, type CommandContext } from "../core/commands/index.js";
 import { registerModule } from "../core/modules/registry.js";
 import { ATTRIBUTE_CATEGORIES } from "../modules/attributes/AttributeService.js";
 import { buildCreatePromptView, buildFichaView } from "./fichaMenu.js";
 import { CharacterRuleError, type LinkKind } from "../modules/characters/CharacterService.js";
+import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 
 registerModule({
@@ -26,6 +27,24 @@ const LINK_KINDS = ["cla", "vila"] as const;
 const vincularArgs = [
   { name: "tipo", type: "string", description: "cla ou vila.", choices: LINK_KINDS },
   { name: "nome", type: "text", description: "Nome do clã ou da vila." }
+] as const satisfies readonly ArgDef[];
+
+/** `.ficha` inteiro é `access: "member"` (pra `ver`/`criar`/`vincular`/`fundo` funcionarem
+ * pra qualquer um) — `resetar` se auto-protege, mesmo padrão usado em `.atributo`. */
+async function requireAdmin<TArgs extends readonly ArgDef[]>(
+  ctx: CommandContext<TArgs, CommandServices>
+): Promise<void> {
+  const allowed = await canUseCommandAccess("admin", ctx.member, ctx.source.client, ctx.services.guildConfig);
+  if (!allowed) {
+    throw new CharacterRuleError("Você precisa ter Administrador ou Gerenciar Servidor para usar esse comando.");
+  }
+}
+
+const RESET_KINDS = ["cla", "vila", "ambos"] as const;
+
+const resetarArgs = [
+  { name: "usuario", type: "user", description: "Dono da ficha a corrigir." },
+  { name: "tipo", type: "string", description: "O que limpar.", choices: RESET_KINDS }
 ] as const satisfies readonly ArgDef[];
 
 const fundoArgs = [
@@ -92,6 +111,29 @@ export const characterCommand = defineCommandGroup<CommandServices>({
           ctx.args.nome
         );
         await ctx.reply(`Ficha **${updated.name}** atualizada.`);
+      }
+    }),
+
+    defineSubcommand<typeof resetarArgs, CommandServices>({
+      name: "resetar",
+      description: "Staff: limpa clã/vila da ficha de alguém (pra quando a escolha foi errada).",
+      args: resetarArgs,
+      async handler(ctx) {
+        await requireAdmin(ctx);
+
+        const character = await ctx.services.characters.getActiveCharacter(ctx.guild, ctx.args.usuario.id);
+        if (!character) {
+          throw new CharacterRuleError(`${ctx.args.usuario.username} não tem uma ficha ativa neste servidor.`);
+        }
+
+        const tipo = ctx.args.tipo as (typeof RESET_KINDS)[number];
+        const updated = await ctx.services.characters.clearWorldLinks(ctx.guild, ctx.user.id, character, tipo);
+
+        const labels = { cla: "clã", vila: "vila", ambos: "clã e vila" } as const;
+        await ctx.reply(
+          `Limpei ${labels[tipo]} da ficha de **${updated.name}**. ` +
+            "Os bônus somem junto e a pessoa já pode escolher de novo pelo `.ficha` dela."
+        );
       }
     }),
 

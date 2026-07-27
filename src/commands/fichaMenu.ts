@@ -243,7 +243,9 @@ export async function buildFichaView(
 
     const target = resolvedCategory ?? DEFAULT_STYLE_TARGET;
 
-    if (clans.length > 0) {
+    // Uma vez escolhido, o select some — fixa a pessoa na escolha em vez de deixar trocar
+    // livremente. Só staff consegue reverter (.ficha resetar), o que faz o select voltar.
+    if (clans.length > 0 && !character.clanId) {
       components.push(
         row(
           new StringSelectMenuBuilder()
@@ -254,15 +256,14 @@ export async function buildFichaView(
                 new StringSelectMenuOptionBuilder()
                   .setLabel(truncate(clan.name, 100))
                   .setValue(clan.name)
-                  .setDescription(truncate(clan.description ?? "Sem descrição.", 100))
-                  .setDefault(clan.id === character.clanId)
+                  .setDescription(truncate(clan.description || "Sem descrição.", 100))
               )
             )
         )
       );
     }
 
-    if (villages.length > 0) {
+    if (villages.length > 0 && !character.villageId) {
       components.push(
         row(
           new StringSelectMenuBuilder()
@@ -273,8 +274,7 @@ export async function buildFichaView(
                 new StringSelectMenuOptionBuilder()
                   .setLabel(truncate(village.name, 100))
                   .setValue(village.name)
-                  .setDescription(truncate(village.description ?? "Sem descrição.", 100))
-                  .setDefault(village.id === character.villageId)
+                  .setDescription(truncate(village.description || "Sem descrição.", 100))
               )
             )
         )
