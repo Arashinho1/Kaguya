@@ -43,6 +43,9 @@ export interface CardParams {
   chakra: number;
   trainingPoints: number | null;
   attributes: CardAttribute[];
+  /** Desenhado acima das barras — usado quando a ficha gera um card por categoria de
+   * atributo (ex: "💪 Atributos Físicos" / "🧠 Atributos Mentais"), ver fichaMenu.ts. */
+  sectionLabel?: string | null;
 }
 
 const MAX_ATTRIBUTE_BARS = 8;
@@ -58,7 +61,7 @@ export async function renderFichaCard(params: CardParams): Promise<Buffer> {
   drawOverlay(ctx);
   await drawAvatarAndHeader(ctx, params);
   drawChakraStat(ctx, params.chakra, params.trainingPoints);
-  drawAttributeBars(ctx, params.attributes);
+  drawAttributeBars(ctx, params.attributes, params.sectionLabel);
   drawFrame(ctx);
 
   return canvas.toBuffer("image/png");
@@ -206,9 +209,15 @@ function drawChakraStat(ctx: SKRSContext2D, chakra: number, trainingPoints: numb
   ctx.textAlign = "left";
 }
 
-function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[]): void {
+function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[], sectionLabel?: string | null): void {
   const shown = attributes.slice(0, MAX_ATTRIBUTE_BARS);
   if (shown.length === 0) return;
+
+  if (sectionLabel) {
+    ctx.font = `600 22px "${FONT_SEMIBOLD}"`;
+    ctx.fillStyle = ACCENT;
+    ctx.fillText(sectionLabel, 60, 228);
+  }
 
   // Só considera atributos sem maxValue próprio pra não deixar um atributo com teto alto
   // (ex: um "ninjutsu" com maxValue:50) esmagar visualmente os outros na mesma escala.
@@ -218,7 +227,7 @@ function drawAttributeBars(ctx: SKRSContext2D, attributes: CardAttribute[]): voi
   const colX = [60, 500];
   const colWidth = 400;
   const rowHeight = 70;
-  const startY = 250;
+  const startY = sectionLabel ? 260 : 250;
   const barHeight = 14;
 
   shown.forEach((attr, index) => {

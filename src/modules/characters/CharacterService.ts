@@ -33,6 +33,7 @@ export interface CharacterWithWorld {
 export interface CharacterAttributeView {
   key: string;
   name: string;
+  category: string;
   baseValue: number;
   bonus: number;
   value: number;
@@ -221,7 +222,7 @@ export class CharacterService {
       const bonus = combinedBonuses[attr.key] ?? 0;
       const value = baseValue + bonus;
       attributeValues[attr.key] = value;
-      return { key: attr.key, name: attr.name, baseValue, bonus, value, maxValue: attr.maxValue };
+      return { key: attr.key, name: attr.name, category: attr.category, baseValue, bonus, value, maxValue: attr.maxValue };
     });
 
     const chakraFormula = await this.attributes.getChakraFormula(guild);

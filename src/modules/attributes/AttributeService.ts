@@ -15,10 +15,15 @@ const DEFAULT_CHAKRA_FORMULA: FormulaNode = f.floor(
 
 export class AttributeRuleError extends DomainError {}
 
+/** Categorias reconhecidas pelo card visual da ficha (cardGenerator gera um card por categoria em uso). */
+export const ATTRIBUTE_CATEGORIES = ["fisico", "mental"] as const;
+export type AttributeCategory = (typeof ATTRIBUTE_CATEGORIES)[number];
+
 export interface CreateAttributeInput {
   key: string;
   name: string;
   description?: string;
+  category?: string;
   baseValue?: number;
   minValue?: number;
   maxValue?: number | null;
@@ -28,6 +33,7 @@ export interface CreateAttributeInput {
 export interface UpdateAttributeInput {
   name?: string;
   description?: string | null;
+  category?: string;
   baseValue?: number;
   minValue?: number;
   maxValue?: number | null;
@@ -89,6 +95,7 @@ export class AttributeService {
         key: input.key,
         name: input.name,
         description: input.description,
+        category: input.category ?? "fisico",
         baseValue: input.baseValue ?? 0,
         minValue: input.minValue ?? 0,
         maxValue: input.maxValue,
@@ -233,6 +240,7 @@ function serializeAttribute(attribute: AttributeDefinition): Prisma.InputJsonObj
     key: attribute.key,
     name: attribute.name,
     description: attribute.description,
+    category: attribute.category,
     baseValue: attribute.baseValue,
     minValue: attribute.minValue,
     maxValue: attribute.maxValue,

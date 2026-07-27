@@ -20,14 +20,42 @@ import {
 import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import { DomainError } from "../core/errors.js";
 import type { MenuInteraction } from "../core/commands/menuRegistry.js";
-import type { CharacterWithWorld, LinkKind } from "../modules/characters/CharacterService.js";
+import type { CharacterAttributeView, CharacterWithWorld, LinkKind } from "../modules/characters/CharacterService.js";
 import { renderFichaCard } from "../services/cardGenerator.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
 import { BRAND_COLOR, truncate } from "./uiConstants.js";
 
-export const CARD_FILENAME = "ficha.png";
+const CARD_FILENAME_BASE = "ficha";
 const BACKGROUND_FIELD_ID = "url";
+
+/**
+ * Rótulos desenhados no card (canvas) acima das barras — sem emoji: a fonte bundlada
+ * (Poppins) não tem glifos de emoji, e o container do Discloud não garante fallback
+ * de fonte de sistema pra preencher isso (mesmo problema já visto com "◆" antes).
+ */
+const CATEGORY_SECTION_LABELS: Record<string, string> = {
+  fisico: "ATRIBUTOS FÍSICOS",
+  mental: "ATRIBUTOS MENTAIS"
+};
+
+function categorySectionLabel(category: string): string {
+  return CATEGORY_SECTION_LABELS[category] ?? `ATRIBUTOS (${category.toUpperCase()})`;
+}
+
+/** Preserva a ordem de primeira aparição das categorias (attributes já vêm ordenados por sortOrder/nome). */
+function groupAttributesByCategory(attributes: CharacterAttributeView[]): Map<string, CharacterAttributeView[]> {
+  const groups = new Map<string, CharacterAttributeView[]>();
+  for (const attr of attributes) {
+    const group = groups.get(attr.category);
+    if (group) {
+      group.push(attr);
+    } else {
+      groups.set(attr.category, [attr]);
+    }
+  }
+  return groups;
+}
 
 /**
  * Menu interativo da ficha: clã e vila são escolhidos por select (só entre o que o
@@ -89,29 +117,12 @@ export async function buildFichaView(
 ): Promise<FichaView> {
   const view = await services.characters.getCharacterView(guild, character);
 
-  const embed = new EmbedBuilder()
-    .setColor(BRAND_COLOR)
-    .setTitle(`📜 ${view.character.name}`)
-    .setDescription(
-      view.attributes.length > 0
-        ? view.attributes
-            .map((attr) => `**${attr.name}**: ${attr.value}${attr.bonus !== 0 ? ` (${attr.baseValue} + ${attr.bonus})` : ""}`)
-            .join("\n")
-        : "Nenhum atributo configurado neste servidor ainda."
-    )
-    .addFields(
-      { name: "💠 Chakra", value: String(view.chakra), inline: true },
-      { name: "🏯 Clã", value: view.character.clan?.name ?? "—", inline: true },
-      { name: "🗺️ Vila", value: view.character.village?.name ?? "—", inline: true },
-      { name: "🎖️ Rank", value: view.character.rank?.name ?? "—", inline: true }
-    );
-
   const [avatarUrl, progress] = await Promise.all([
     resolveAvatarUrl(guild, character.userId),
     services.training.getOrCreateProgress(guild, character)
   ]);
 
-  const cardBuffer = await renderFichaCard({
+  const baseCardParams = {
     characterName: view.character.name,
     avatarUrl,
     backgroundUrl: character.backgroundUrl,
@@ -119,12 +130,47 @@ export async function buildFichaView(
     villageName: view.character.village?.name ?? null,
     clanName: view.character.clan?.name ?? null,
     chakra: view.chakra,
-    trainingPoints: progress.trainingPoints,
-    attributes: view.attributes.map((attr) => ({ name: attr.name, value: attr.value, maxValue: attr.maxValue }))
-  });
+    trainingPoints: progress.trainingPoints
+  };
 
-  const attachment = new AttachmentBuilder(cardBuffer, { name: CARD_FILENAME });
-  embed.setImage(`attachment://${CARD_FILENAME}`);
+  // Atributos físicos e mentais são visualmente diferentes o bastante pra merecer
+  // cards separados; sem nenhum atributo cadastrado ainda, cai num único card
+  // genérico (sem seção de barras) igual ao comportamento anterior.
+  interface CardGroup {
+    filename: string;
+    sectionLabel: string | null;
+    attributes: CharacterAttributeView[];
+  }
+
+  const groups = groupAttributesByCategory(view.attributes);
+  const cardGroups: CardGroup[] =
+    groups.size > 0
+      ? [...groups.entries()].map(([category, attrs]) => ({
+          filename: `${CARD_FILENAME_BASE}-${category}.png`,
+          sectionLabel: categorySectionLabel(category),
+          attributes: attrs
+        }))
+      : [{ filename: `${CARD_FILENAME_BASE}.png`, sectionLabel: null, attributes: [] }];
+
+  const files: AttachmentBuilder[] = [];
+  const embeds: EmbedBuilder[] = [];
+
+  for (const [index, group] of cardGroups.entries()) {
+    const cardBuffer = await renderFichaCard({
+      ...baseCardParams,
+      sectionLabel: group.sectionLabel,
+      attributes: group.attributes.map((attr) => ({ name: attr.name, value: attr.value, maxValue: attr.maxValue }))
+    });
+
+    const attachment = new AttachmentBuilder(cardBuffer, { name: group.filename });
+    files.push(attachment);
+
+    const embed = new EmbedBuilder().setColor(BRAND_COLOR).setImage(`attachment://${group.filename}`);
+    if (index === 0) {
+      embed.setTitle(`📜 ${view.character.name}`);
+    }
+    embeds.push(embed);
+  }
 
   const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
 
@@ -182,7 +228,7 @@ export async function buildFichaView(
     );
   }
 
-  return { embeds: [embed], components, files: [attachment] };
+  return { embeds, components, files };
 }
 
 function buildCreateModal(): ModalBuilder {

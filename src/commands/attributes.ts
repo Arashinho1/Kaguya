@@ -8,7 +8,7 @@ import {
 } from "../core/commands/index.js";
 import { formatFormula } from "../core/formula/index.js";
 import { registerModule } from "../core/modules/registry.js";
-import { AttributeRuleError } from "../modules/attributes/AttributeService.js";
+import { ATTRIBUTE_CATEGORIES, AttributeRuleError } from "../modules/attributes/AttributeService.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 import { buildAttributeConfigView } from "./attributeMenu.js";
@@ -35,12 +35,18 @@ async function requireAdmin<TArgs extends readonly ArgDef[]>(
   }
 }
 
-const EDIT_FIELDS = ["nome", "descricao", "base", "min", "max", "ordem"] as const;
+const EDIT_FIELDS = ["nome", "descricao", "categoria", "base", "min", "max", "ordem"] as const;
 
 const listarArgs = [] as const satisfies readonly ArgDef[];
 
 const criarArgs = [
   { name: "chave", type: "string", description: "Chave técnica única (ex: forca)." },
+  {
+    name: "categoria",
+    type: "string",
+    description: "Físico ou mental (define em qual card da ficha ele aparece).",
+    choices: ATTRIBUTE_CATEGORIES
+  },
   { name: "nome", type: "text", description: "Nome de exibição do atributo." }
 ] as const satisfies readonly ArgDef[];
 
@@ -143,7 +149,8 @@ export const attributeAdminCommand = defineCommandGroup<CommandServices>({
         await requireAdmin(ctx);
         const created = await ctx.services.attributes.createAttribute(ctx.guild, ctx.user.id, {
           key: ctx.args.chave,
-          name: ctx.args.nome
+          name: ctx.args.nome,
+          category: ctx.args.categoria ?? "fisico"
         });
 
         await ctx.reply(`Criado **${created.name}** \`[${created.key}]\`.`);
@@ -252,6 +259,13 @@ function buildUpdateFromField(field: string, value: string) {
       return { name: value };
     case "descricao":
       return { description: ["-", "limpar", "null"].includes(value.toLowerCase()) ? null : value };
+    case "categoria": {
+      const normalized = value.toLowerCase();
+      if (!(ATTRIBUTE_CATEGORIES as readonly string[]).includes(normalized)) {
+        throw new AttributeRuleError(`Categoria inválida: \`${value}\`. Opções: ${ATTRIBUTE_CATEGORIES.join(", ")}.`);
+      }
+      return { category: normalized };
+    }
     case "base":
       return { baseValue: parseRequiredInt(value, "base") };
     case "min":

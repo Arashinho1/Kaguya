@@ -90,6 +90,8 @@ model AttributeDefinition {
   key         String
   name        String
   description String?
+  /** "fisico" | "mental" — usado pra separar o card visual da ficha em dois (ver cardGenerator). */
+  category    String   @default("fisico")
   baseValue   Int      @default(0)
   minValue    Int      @default(0)
   maxValue    Int?

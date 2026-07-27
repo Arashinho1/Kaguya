@@ -17,10 +17,20 @@ import {
 import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import { DomainError } from "../core/errors.js";
 import type { MenuInteraction } from "../core/commands/menuRegistry.js";
+import { ATTRIBUTE_CATEGORIES, type AttributeCategory } from "../modules/attributes/AttributeService.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
 import { BRAND_COLOR, truncate } from "./uiConstants.js";
+
+const CATEGORY_LABELS: Record<AttributeCategory, string> = {
+  fisico: "💪 Físico",
+  mental: "🧠 Mental"
+};
+
+function isAttributeCategory(value: string | undefined): value is AttributeCategory {
+  return (ATTRIBUTE_CATEGORIES as readonly string[]).includes(value ?? "");
+}
 
 /**
  * Menu de configuração de atributos (`.atributo config` / `.attr config`): dois botões
@@ -56,26 +66,50 @@ export async function buildAttributeConfigView(guild: Guild, services: CommandSe
     services.attributes.getChakraRankTable(guild)
   ]);
 
-  const embed = new EmbedBuilder()
-    .setColor(BRAND_COLOR)
-    .setTitle("⚙️ Configuração de Atributos")
-    .setDescription(
-      attributes.length > 0
-        ? attributes.map((attr) => `**${attr.name}** \`[${attr.key}]\` — base ${attr.baseValue}`).join("\n")
-        : "Nenhum atributo ativo configurado ainda."
-    )
-    .addFields({
-      name: "💠 Chakra por rank",
-      value:
-        Object.keys(rankTable).length > 0
-          ? Object.entries(rankTable)
-              .map(([key, value]) => `\`${key}\`: ${value}`)
-              .join("\n")
-          : "Ainda não configurado — use o botão abaixo."
-    });
+  const embed = new EmbedBuilder().setColor(BRAND_COLOR).setTitle("⚙️ Configuração de Atributos");
+
+  if (attributes.length === 0) {
+    embed.setDescription("Nenhum atributo ativo configurado ainda.");
+  } else {
+    for (const category of ATTRIBUTE_CATEGORIES) {
+      const inCategory = attributes.filter((attr) => attr.category === category);
+      if (inCategory.length === 0) continue;
+
+      embed.addFields({
+        name: CATEGORY_LABELS[category],
+        value: inCategory.map((attr) => `**${attr.name}** \`[${attr.key}]\` — base ${attr.baseValue}`).join("\n")
+      });
+    }
+
+    const knownCategories: readonly string[] = ATTRIBUTE_CATEGORIES;
+    const others = attributes.filter((attr) => !knownCategories.includes(attr.category));
+    if (others.length > 0) {
+      embed.addFields({
+        name: "🔹 Outros",
+        value: others.map((attr) => `**${attr.name}** \`[${attr.key}]\` (${attr.category})`).join("\n")
+      });
+    }
+  }
+
+  embed.addFields({
+    name: "💠 Chakra por rank",
+    value:
+      Object.keys(rankTable).length > 0
+        ? Object.entries(rankTable)
+            .map(([key, value]) => `\`${key}\`: ${value}`)
+            .join("\n")
+        : "Ainda não configurado — use o botão abaixo."
+  });
 
   const buttons = row(
-    new ButtonBuilder().setCustomId(buildId("openCreateModal")).setLabel("➕ Criar atributo").setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(buildId("openCreateModal", "fisico"))
+      .setLabel(`➕ Criar — ${CATEGORY_LABELS.fisico}`)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(buildId("openCreateModal", "mental"))
+      .setLabel(`➕ Criar — ${CATEGORY_LABELS.mental}`)
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(buildId("openChakraMenu")).setLabel("💠 Fórmula de Chakra").setStyle(ButtonStyle.Primary)
   );
 
@@ -131,7 +165,7 @@ export async function buildChakraRankView(guild: Guild, services: CommandService
   return { embeds: [embed], components };
 }
 
-function buildCreateModal(): ModalBuilder {
+function buildCreateModal(category: AttributeCategory): ModalBuilder {
   const keyInput = new TextInputBuilder()
     .setCustomId(CREATE_KEY_FIELD)
     .setLabel("Chave técnica (ex: forca)")
@@ -149,8 +183,8 @@ function buildCreateModal(): ModalBuilder {
     .setRequired(true);
 
   return new ModalBuilder()
-    .setCustomId(buildId("createModal"))
-    .setTitle("Criar atributo")
+    .setCustomId(buildId("createModal", category))
+    .setTitle(`Criar atributo — ${CATEGORY_LABELS[category]}`.slice(0, 45))
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(keyInput),
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput)
@@ -199,7 +233,7 @@ export async function handleAttributeMenuInteraction(interaction: MenuInteractio
 
   if (interaction.isModalSubmit()) {
     if (action === "createModal") {
-      await handleCreateModalSubmit(interaction, services);
+      await handleCreateModalSubmit(interaction, services, parts[0]);
     } else if (action === "chakraValueModal") {
       await handleChakraValueModalSubmit(interaction, services, parts[0]);
     }
@@ -209,7 +243,8 @@ export async function handleAttributeMenuInteraction(interaction: MenuInteractio
   switch (action) {
     case "openCreateModal": {
       if (!interaction.isButton()) return;
-      await interaction.showModal(buildCreateModal());
+      const category = isAttributeCategory(parts[0]) ? parts[0] : "fisico";
+      await interaction.showModal(buildCreateModal(category));
       return;
     }
 
@@ -247,14 +282,19 @@ export async function handleAttributeMenuInteraction(interaction: MenuInteractio
   }
 }
 
-async function handleCreateModalSubmit(interaction: ModalSubmitInteraction<"cached">, services: CommandServices): Promise<void> {
+async function handleCreateModalSubmit(
+  interaction: ModalSubmitInteraction<"cached">,
+  services: CommandServices,
+  categoryPart: string | undefined
+): Promise<void> {
   const key = interaction.fields.getTextInputValue(CREATE_KEY_FIELD).trim();
   const name = interaction.fields.getTextInputValue(CREATE_NAME_FIELD).trim();
+  const category = isAttributeCategory(categoryPart) ? categoryPart : "fisico";
 
   await interaction.deferUpdate();
 
   try {
-    await services.attributes.createAttribute(interaction.guild, interaction.user.id, { key, name });
+    await services.attributes.createAttribute(interaction.guild, interaction.user.id, { key, name, category });
     const view = await buildAttributeConfigView(interaction.guild, services);
     await interaction.editReply(view);
   } catch (error) {
