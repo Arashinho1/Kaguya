@@ -113,6 +113,7 @@ model Character {
   clanId     String?
   villageId  String?
   rankId     String?
+  backgroundUrl String?
   attributes Json     @default("{}")
   metadata   Json     @default("{}")
   isActive   Boolean  @default(true)

@@ -21,6 +21,7 @@ export interface CharacterWithWorld {
   clanId: string | null;
   villageId: string | null;
   rankId: string | null;
+  backgroundUrl: string | null;
   attributes: unknown;
   metadata: unknown;
   isActive: boolean;
@@ -35,6 +36,7 @@ export interface CharacterAttributeView {
   baseValue: number;
   bonus: number;
   value: number;
+  maxValue: number | null;
 }
 
 export interface CharacterView {
@@ -158,6 +160,30 @@ export class CharacterService {
     });
   }
 
+  public async setBackground(
+    guild: Guild,
+    character: CharacterWithWorld,
+    backgroundUrl: string | null
+  ): Promise<CharacterWithWorld> {
+    const rpgGuild = await this.guildConfig.ensureGuild(guild);
+
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data: { backgroundUrl },
+      include: WORLD_INCLUDE
+    });
+
+    await this.guildConfig.writeAuditLog({
+      guildId: rpgGuild.id,
+      actorId: character.userId,
+      action: "character.background.update",
+      targetType: "Character",
+      targetId: character.id
+    });
+
+    return updated;
+  }
+
   public getBaseAttributeSnapshot(character: CharacterWithWorld): Record<string, number> {
     return isRecordOfNumbers(character.attributes) ? character.attributes : {};
   }
@@ -195,7 +221,7 @@ export class CharacterService {
       const bonus = combinedBonuses[attr.key] ?? 0;
       const value = baseValue + bonus;
       attributeValues[attr.key] = value;
-      return { key: attr.key, name: attr.name, baseValue, bonus, value };
+      return { key: attr.key, name: attr.name, baseValue, bonus, value, maxValue: attr.maxValue };
     });
 
     const chakraFormula = await this.attributes.getChakraFormula(guild);

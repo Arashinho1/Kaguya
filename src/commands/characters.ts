@@ -1,7 +1,9 @@
+import { Message } from "discord.js";
+
 import { defineCommandGroup, defineSubcommand, type ArgDef } from "../core/commands/index.js";
 import { registerModule } from "../core/modules/registry.js";
 import { buildCreatePromptView, buildFichaView } from "./fichaMenu.js";
-import type { LinkKind } from "../modules/characters/CharacterService.js";
+import { CharacterRuleError, type LinkKind } from "../modules/characters/CharacterService.js";
 import type { CommandServices } from "../types/command.js";
 
 registerModule({
@@ -23,6 +25,10 @@ const LINK_KINDS = ["cla", "vila"] as const;
 const vincularArgs = [
   { name: "tipo", type: "string", description: "cla ou vila.", choices: LINK_KINDS },
   { name: "nome", type: "text", description: "Nome do clã ou da vila." }
+] as const satisfies readonly ArgDef[];
+
+const fundoArgs = [
+  { name: "url", type: "text", description: "Link da imagem (ou anexe uma imagem junto com o comando).", required: false }
 ] as const satisfies readonly ArgDef[];
 
 export const characterCommand = defineCommandGroup<CommandServices>({
@@ -78,6 +84,34 @@ export const characterCommand = defineCommandGroup<CommandServices>({
           ctx.args.nome
         );
         await ctx.reply(`Ficha **${updated.name}** atualizada.`);
+      }
+    }),
+
+    defineSubcommand<typeof fundoArgs, CommandServices>({
+      name: "fundo",
+      description: "Define o fundo do seu card de ficha (link de imagem ou anexo).",
+      args: fundoArgs,
+      async handler(ctx) {
+        const character = await ctx.services.characters.getActiveCharacter(ctx.guild, ctx.user.id);
+        if (!character) {
+          await ctx.reply("Você ainda não tem uma ficha. Crie uma com `.ficha criar <nome>`.");
+          return;
+        }
+
+        const attachmentUrl = ctx.source instanceof Message ? ctx.source.attachments.first()?.url : undefined;
+        const url = attachmentUrl ?? ctx.args.url;
+
+        if (!url) {
+          throw new CharacterRuleError(
+            "Informe um link de imagem ou anexe uma imagem junto com o comando. Pelo menu, use o botão 🖼️ Alterar fundo."
+          );
+        }
+        if (!/^https?:\/\//i.test(url)) {
+          throw new CharacterRuleError("Isso não parece um link válido (precisa começar com http:// ou https://).");
+        }
+
+        await ctx.services.characters.setBackground(ctx.guild, character, url);
+        await ctx.reply("Fundo atualizado! Use `.ficha` para ver como ficou.");
       }
     })
   ]

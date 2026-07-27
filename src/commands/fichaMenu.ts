@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
@@ -20,9 +21,13 @@ import { buildCustomId, parseCustomId } from "../core/commands/customId.js";
 import { DomainError } from "../core/errors.js";
 import type { MenuInteraction } from "../core/commands/menuRegistry.js";
 import type { CharacterWithWorld, LinkKind } from "../modules/characters/CharacterService.js";
+import { renderFichaCard } from "../services/cardGenerator.js";
 import type { CommandServices } from "../types/command.js";
 import { menuRegistry } from "./menus.js";
 import { BRAND_COLOR, truncate } from "./uiConstants.js";
+
+export const CARD_FILENAME = "ficha.png";
+const BACKGROUND_FIELD_ID = "url";
 
 /**
  * Menu interativo da ficha: clã e vila são escolhidos por select (só entre o que o
@@ -40,6 +45,7 @@ type ComponentMenuInteraction = StringSelectMenuInteraction<"cached"> | ButtonIn
 export interface FichaView {
   embeds: EmbedBuilder[];
   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+  files?: AttachmentBuilder[];
 }
 
 function buildId(action: string, ...parts: string[]): string {
@@ -66,6 +72,15 @@ export function buildCreatePromptView(): FichaView {
   return { embeds: [embed], components: [row(createButton)] };
 }
 
+async function resolveAvatarUrl(guild: Guild, userId: string): Promise<string> {
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (member) {
+    return member.displayAvatarURL({ extension: "png", size: 256 });
+  }
+  const user = await guild.client.users.fetch(userId).catch(() => null);
+  return user?.displayAvatarURL({ extension: "png", size: 256 }) ?? guild.client.user.displayAvatarURL();
+}
+
 export async function buildFichaView(
   guild: Guild,
   character: CharacterWithWorld,
@@ -90,6 +105,26 @@ export async function buildFichaView(
       { name: "🗺️ Vila", value: view.character.village?.name ?? "—", inline: true },
       { name: "🎖️ Rank", value: view.character.rank?.name ?? "—", inline: true }
     );
+
+  const [avatarUrl, progress] = await Promise.all([
+    resolveAvatarUrl(guild, character.userId),
+    services.training.getOrCreateProgress(guild, character)
+  ]);
+
+  const cardBuffer = await renderFichaCard({
+    characterName: view.character.name,
+    avatarUrl,
+    backgroundUrl: character.backgroundUrl,
+    rankName: view.character.rank?.name ?? null,
+    villageName: view.character.village?.name ?? null,
+    clanName: view.character.clan?.name ?? null,
+    chakra: view.chakra,
+    trainingPoints: progress.trainingPoints,
+    attributes: view.attributes.map((attr) => ({ name: attr.name, value: attr.value, maxValue: attr.maxValue }))
+  });
+
+  const attachment = new AttachmentBuilder(cardBuffer, { name: CARD_FILENAME });
+  embed.setImage(`attachment://${CARD_FILENAME}`);
 
   const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
 
@@ -136,9 +171,18 @@ export async function buildFichaView(
         )
       );
     }
+
+    components.push(
+      row(
+        new ButtonBuilder()
+          .setCustomId(buildId("openBackgroundModal"))
+          .setLabel("🖼️ Alterar fundo")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
   }
 
-  return { embeds: [embed], components };
+  return { embeds: [embed], components, files: [attachment] };
 }
 
 function buildCreateModal(): ModalBuilder {
@@ -156,7 +200,29 @@ function buildCreateModal(): ModalBuilder {
     .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput));
 }
 
+function buildBackgroundModal(): ModalBuilder {
+  const urlInput = new TextInputBuilder()
+    .setCustomId(BACKGROUND_FIELD_ID)
+    .setLabel("Link da imagem de fundo")
+    .setPlaceholder("https://... (pra usar um anexo, rode .ficha fundo com a imagem anexada)")
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(500)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(buildId("backgroundModal"))
+    .setTitle("Alterar fundo da ficha")
+    .addComponents(new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(urlInput));
+}
+
 // ─── Roteamento de interações ─────────────────────────────────────────────────
+
+/** Mesmo problema do JutsuMenu: sem `attachments: []` explícito, o Discord mantém o
+ * anexo antigo numa edição — aqui toda view sempre tem uma imagem nova, mas mantém
+ * a mesma defesa por segurança/consistência. */
+function withClearedAttachments(view: FichaView): FichaView & { attachments: [] } {
+  return { ...view, files: view.files ?? [], attachments: [] };
+}
 
 async function handleFichaMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
   const { action } = parseCustomId(interaction.customId);
@@ -164,6 +230,8 @@ async function handleFichaMenuInteraction(interaction: MenuInteraction, services
   if (interaction.isModalSubmit()) {
     if (action === "createModal") {
       await handleCreateModalSubmit(interaction, services);
+    } else if (action === "backgroundModal") {
+      await handleBackgroundModalSubmit(interaction, services);
     }
     return;
   }
@@ -172,6 +240,12 @@ async function handleFichaMenuInteraction(interaction: MenuInteraction, services
     case "openCreateModal": {
       if (!interaction.isButton()) return;
       await interaction.showModal(buildCreateModal());
+      return;
+    }
+
+    case "openBackgroundModal": {
+      if (!interaction.isButton()) return;
+      await interaction.showModal(buildBackgroundModal());
       return;
     }
 
@@ -200,13 +274,15 @@ async function handleLink(
 ): Promise<void> {
   if (!value) return;
 
+  await interaction.deferUpdate();
+
   try {
     const updated = await services.characters.linkCharacter(interaction.guild, interaction.user.id, kind, value);
     const view = await buildFichaView(interaction.guild, updated, services, true);
-    await interaction.update(view);
+    await interaction.editReply(withClearedAttachments(view));
   } catch (error) {
     if (error instanceof DomainError) {
-      await interaction.reply({ content: error.message, ephemeral: true });
+      await interaction.followUp({ content: error.message, ephemeral: true });
       return;
     }
     throw error;
@@ -218,19 +294,56 @@ async function handleCreateModalSubmit(
   services: CommandServices
 ): Promise<void> {
   const name = interaction.fields.getTextInputValue(NAME_FIELD_ID).trim();
+  const fromMessage = interaction.isFromMessage();
+
+  if (fromMessage) {
+    await interaction.deferUpdate();
+  } else {
+    await interaction.deferReply({ ephemeral: true });
+  }
 
   try {
     const created = await services.characters.createCharacter(interaction.guild, interaction.user.id, name);
     const view = await buildFichaView(interaction.guild, created, services, true);
-
-    if (interaction.isFromMessage()) {
-      await interaction.update(view);
-    } else {
-      await interaction.reply({ ...view, ephemeral: true });
-    }
+    await interaction.editReply(fromMessage ? withClearedAttachments(view) : view);
   } catch (error) {
     if (error instanceof DomainError) {
-      await interaction.reply({ content: error.message, ephemeral: true });
+      await interaction.editReply({ content: error.message, embeds: [], components: [], files: [] });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function handleBackgroundModalSubmit(
+  interaction: ModalSubmitInteraction<"cached">,
+  services: CommandServices
+): Promise<void> {
+  const url = interaction.fields.getTextInputValue(BACKGROUND_FIELD_ID).trim();
+  const fromMessage = interaction.isFromMessage();
+
+  if (fromMessage) {
+    await interaction.deferUpdate();
+  } else {
+    await interaction.deferReply({ ephemeral: true });
+  }
+
+  try {
+    if (!/^https?:\/\//i.test(url)) {
+      throw new DomainError("Isso não parece um link válido (precisa começar com http:// ou https://).");
+    }
+
+    const character = await services.characters.getActiveCharacter(interaction.guild, interaction.user.id);
+    if (!character) {
+      throw new DomainError("Você ainda não tem uma ficha.");
+    }
+
+    const updated = await services.characters.setBackground(interaction.guild, character, url);
+    const view = await buildFichaView(interaction.guild, updated, services, true);
+    await interaction.editReply(fromMessage ? withClearedAttachments(view) : view);
+  } catch (error) {
+    if (error instanceof DomainError) {
+      await interaction.editReply({ content: error.message, embeds: [], components: [], files: [] });
       return;
     }
     throw error;
