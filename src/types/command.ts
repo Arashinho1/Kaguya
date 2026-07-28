@@ -5,6 +5,7 @@ import type { EconomyService } from "../modules/economy/EconomyService.js";
 import type { GuildConfigService } from "../modules/guild-config/GuildConfigService.js";
 import type { JutsuService } from "../modules/jutsus/JutsuService.js";
 import type { PericiaService } from "../modules/pericias/PericiaService.js";
+import type { PretensaoService } from "../modules/vagas/PretensaoService.js";
 import type { TrainingService } from "../modules/training/TrainingService.js";
 import type { VagaService } from "../modules/vagas/VagaService.js";
 import type { WorldConfigService } from "../modules/world/WorldConfigService.js";
@@ -21,4 +22,5 @@ export interface CommandServices {
   combat: CombatService;
   economy: EconomyService;
   vagas: VagaService;
+  pretensao: PretensaoService;
 }

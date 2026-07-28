@@ -8,6 +8,7 @@ import { helpCommand } from "./help.js";
 import { jutsuAdminCommand, jutsuCommand } from "./jutsus.js";
 import { meditateCommand } from "./meditation.js";
 import { periciaAdminCommand, periciasCommand } from "./pericias.js";
+import { pretensaoCommand } from "./pretensao.js";
 import { setarCommand } from "./setar.js";
 import { setupCommand } from "./setup.js";
 import { paCommand, trainingCommand } from "./training.js";
@@ -34,7 +35,8 @@ for (const command of [
   combatAdminCommand,
   economyCommand,
   economyAdminCommand,
-  vagaCommand
+  vagaCommand,
+  pretensaoCommand
 ]) {
   commandRegistry.register(command);
 }

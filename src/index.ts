@@ -13,6 +13,7 @@ import { EconomyService } from "./modules/economy/EconomyService.js";
 import { GuildConfigService } from "./modules/guild-config/GuildConfigService.js";
 import { JutsuService } from "./modules/jutsus/JutsuService.js";
 import { PericiaService } from "./modules/pericias/PericiaService.js";
+import { PretensaoService } from "./modules/vagas/PretensaoService.js";
 import { TrainingService } from "./modules/training/TrainingService.js";
 import { VagaService } from "./modules/vagas/VagaService.js";
 import { WorldConfigService } from "./modules/world/WorldConfigService.js";
@@ -33,6 +34,7 @@ const pericias = new PericiaService(prisma, guildConfig, economy);
 const jutsus = new JutsuService(prisma, guildConfig, characters, pericias);
 const combat = new CombatService(prisma, guildConfig, economy);
 const vagas = new VagaService(prisma, guildConfig);
+const pretensao = new PretensaoService(guildConfig, vagas, characters);
 
 const services: CommandServices = {
   guildConfig,
@@ -44,7 +46,8 @@ const services: CommandServices = {
   jutsus,
   combat,
   economy,
-  vagas
+  vagas,
+  pretensao
 };
 
 client.once(Events.ClientReady, (readyClient) => {

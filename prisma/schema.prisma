@@ -524,6 +524,8 @@ model VagaDefinition {
   villageRestrictionId String?
   /** IDs (key) de outras VagaDefinition vinculadas — referência/organização, escolhido via seletor. */
   linkedVagaKeys Json  @default("[]")
+  /** Se essa vaga pode ser pega automaticamente via pretensão (mandando o ID no canal configurado). */
+  pretensaoEnabled Boolean @default(false)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

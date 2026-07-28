@@ -221,6 +221,7 @@ export const vagaCommand = defineCommandGroup<CommandServices>({
             { name: "Categoria", value: vaga.category.name, inline: true },
             { name: "Status", value: vaga.isActive ? "🟢 Ativa" : "🔴 Inativa", inline: true },
             { name: "Ocupação", value: formatLimit(vaga, officialCount), inline: true },
+            { name: "Pretensão", value: vaga.pretensaoEnabled ? "✅ Disponível" : "❌ Não disponível", inline: true },
             {
               name: "Bônus",
               value: Object.entries(vaga.bonuses as Record<string, number>).length

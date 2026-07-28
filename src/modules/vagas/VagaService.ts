@@ -55,6 +55,7 @@ export interface VagaDefinitionUpdate {
   bonuses?: Record<string, number>;
   memberLimit?: number;
   isActive?: boolean;
+  pretensaoEnabled?: boolean;
 }
 
 export interface GrantResult {
@@ -232,7 +233,8 @@ export class VagaService {
         description: input.description,
         bonuses: input.bonuses ? (normalizeBonuses(input.bonuses) as unknown as Prisma.InputJsonValue) : undefined,
         memberLimit: input.memberLimit,
-        isActive: input.isActive
+        isActive: input.isActive,
+        pretensaoEnabled: input.pretensaoEnabled
       },
       include: VAGA_INCLUDE
     });

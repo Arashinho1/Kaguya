@@ -14,6 +14,7 @@ export async function handleMessageCreate(message: Message, services: CommandSer
 
   if (!message.content.startsWith(prefix)) {
     await handleNarratedJutsuUse(message, services);
+    await handlePretensaoClaim(message, services);
     return;
   }
 
@@ -102,6 +103,34 @@ async function handleNarratedJutsuUse(message: Message<true>, services: CommandS
       throw error;
     }
   }
+}
+
+/**
+ * Pretensão de vaga: no canal configurado, uma mensagem cujo conteúdo bate com o ID de uma
+ * vaga habilitada tenta o claim. Sem match nenhum (canal errado ou texto não é ID de vaga
+ * nenhuma) é ignorado silenciosamente — não é todo mundo que vai mandar só o ID puro ali.
+ */
+async function handlePretensaoClaim(message: Message<true>, services: CommandServices): Promise<void> {
+  if (!(await services.guildConfig.isModuleEnabled(message.guild, "vagas").catch(() => true))) {
+    return;
+  }
+
+  const result = await services.pretensao.attemptClaim(message.guild, {
+    channelId: message.channelId,
+    content: message.content,
+    authorId: message.author.id
+  });
+
+  if (result.kind === "ignored") {
+    return;
+  }
+
+  if (result.kind === "failed") {
+    await message.reply(result.reason).catch(() => {});
+    return;
+  }
+
+  await message.react("✅").catch(() => {});
 }
 
 function extractBracketedText(content: string): string[] {

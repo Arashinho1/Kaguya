@@ -280,6 +280,7 @@ async function buildVagaDetailView(
       { name: "Categoria", value: vaga.category.name, inline: true },
       { name: "Status", value: vaga.isActive ? "🟢 Ativa" : "🔴 Inativa", inline: true },
       { name: "Ocupação", value: occupancyLabel(vaga, officialCount), inline: true },
+      { name: "Pretensão", value: vaga.pretensaoEnabled ? "✅ Disponível" : "❌ Não disponível", inline: true },
       { name: "Bônus", value: formatBonuses(vaga.bonuses) || "Nenhum" },
       { name: "Chaves de bônus disponíveis", value: bonusKeys.length ? bonusKeys.join(", ") : "Nenhuma (cadastre atributos em `.atributo config`)." },
       { name: "Rank inicial", value: vaga.initialRank?.name ?? "Nenhum", inline: true },
@@ -291,6 +292,7 @@ async function buildVagaDetailView(
     row(
       button("openBasicEditModal", "✏️ Editar", ButtonStyle.Primary, vaga.id),
       button("toggleActive", vaga.isActive ? "🔴 Desativar" : "🟢 Ativar", ButtonStyle.Secondary, vaga.id),
+      button("togglePretensao", vaga.pretensaoEnabled ? "❌ Tirar da pretensão" : "✅ Habilitar pretensão", ButtonStyle.Secondary, vaga.id),
       button("removeVaga", "🗑️ Remover", ButtonStyle.Danger, vaga.id)
     ),
     row(
@@ -678,6 +680,12 @@ async function routeComponent(
       return;
     }
 
+    case "togglePretensao": {
+      if (!interaction.isButton()) return;
+      await handleTogglePretensao(interaction, services, parts[0]);
+      return;
+    }
+
     case "removeVaga": {
       if (!interaction.isButton()) return;
       await handleRemoveVaga(interaction, services, parts[0]);
@@ -884,6 +892,25 @@ async function handleToggleActive(interaction: ComponentMenuInteraction, service
   }
 
   const updated = await services.vagas.updateVaga(interaction.guild, interaction.user.id, vaga.key, { isActive: !vaga.isActive });
+  const officialCount = updated ? await services.vagas.countOfficialOccupants(updated.id) : 0;
+  await interaction.editReply(
+    updated ? await buildVagaDetailView(interaction.guild, services, updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, "")
+  );
+}
+
+async function handleTogglePretensao(interaction: ComponentMenuInteraction, services: CommandServices, vagaId?: string): Promise<void> {
+  if (!vagaId) return;
+  await interaction.deferUpdate();
+
+  const vaga = await services.vagas.getVagaById(vagaId);
+  if (!vaga) {
+    await interaction.editReply(await buildVagaSelectorView(interaction.guild, services, 0, ""));
+    return;
+  }
+
+  const updated = await services.vagas.updateVaga(interaction.guild, interaction.user.id, vaga.key, {
+    pretensaoEnabled: !vaga.pretensaoEnabled
+  });
   const officialCount = updated ? await services.vagas.countOfficialOccupants(updated.id) : 0;
   await interaction.editReply(
     updated ? await buildVagaDetailView(interaction.guild, services, updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, "")
