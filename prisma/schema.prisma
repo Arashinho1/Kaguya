@@ -47,6 +47,10 @@ model RpgGuild {
   itemDefinitions    ItemDefinition[]
   inventories        CharacterInventory[]
   currencyLogs       CurrencyLog[]
+  vagaCategories     VagaCategory[]
+  vagaDefinitions    VagaDefinition[]
+  vagaOccupants      VagaOccupant[]
+  vagaHistory        VagaHistory[]
 
   @@map("rpg_guilds")
 }
@@ -142,6 +146,8 @@ model Character {
   duelsWon          DuelEncounter[] @relation("DuelWinner")
   inventory         CharacterInventory[]
   currencyLogs      CurrencyLog[]
+  vagaOccupancies   VagaOccupant[]
+  vagaHistory       VagaHistory[]
 
   @@unique([guildId, name])
   @@index([guildId, userId])
@@ -221,6 +227,7 @@ model Village {
 
   guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   characters Character[]
+  restrictedVagas VagaDefinition[]
 
   @@unique([guildId, name])
   @@index([guildId])
@@ -241,6 +248,7 @@ model RankDefinition {
 
   guild      RpgGuild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   characters Character[]
+  initialForVagas VagaDefinition[]
 
   @@unique([guildId, key])
   @@index([guildId])
@@ -351,6 +359,7 @@ model JutsuDefinition {
   type      JutsuType?       @relation(fields: [typeId], references: [id], onDelete: SetNull)
   learnedBy CharacterJutsu[]
   useLogs   JutsuUseLog[]
+  vagasGranting VagaDefinition[] @relation("VagaInitialJutsus")
 
   @@unique([guildId, key])
   @@unique([guildId, externalId])
@@ -478,6 +487,105 @@ model CurrencyLog {
 
   @@index([guildId, characterId, createdAt])
   @@map("currency_logs")
+}
+
+model VagaCategory {
+  id           String   @id @default(cuid())
+  guildId      String
+  name         String
+  /** Máximo de vagas (não-extra) que uma pessoa pode ocupar nessa categoria. Nulo = sem limite. */
+  maxPerPerson Int?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  guild RpgGuild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  vagas VagaDefinition[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@map("vaga_categories")
+}
+
+model VagaDefinition {
+  id          String   @id @default(cuid())
+  guildId     String
+  /** ID técnico escolhido por quem cria a vaga (não gerado automaticamente). */
+  key         String
+  name        String
+  categoryId  String
+  description String?
+  /** Bônus de atributo genérico — mesmo mecanismo de Clan/Village/RankDefinition.bonuses
+   * (inclusive "chakra:N" pra bônus de chakra, sem campo hardcoded separado). */
+  bonuses     Json     @default("{}")
+  /** Limite de ocupantes oficiais (não-extra). 0 = infinito. */
+  memberLimit Int      @default(0)
+  initialRankId        String?
+  villageRestrictionId String?
+  /** IDs (key) de outras VagaDefinition vinculadas — referência/organização, escolhido via seletor. */
+  linkedVagaKeys Json  @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild              RpgGuild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  category           VagaCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  initialRank        RankDefinition? @relation(fields: [initialRankId], references: [id], onDelete: SetNull)
+  villageRestriction Village?        @relation(fields: [villageRestrictionId], references: [id], onDelete: SetNull)
+  initialJutsus      JutsuDefinition[] @relation("VagaInitialJutsus")
+  occupants          VagaOccupant[]
+  history            VagaHistory[]
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@index([categoryId])
+  @@map("vaga_definitions")
+}
+
+model VagaOccupant {
+  id          String   @id @default(cuid())
+  guildId     String
+  vagaId      String
+  characterId String
+  /** Extra não ocupa espaço oficial (memberLimit/maxPerPerson) e aparece marcada com "*". */
+  isExtra     Boolean  @default(false)
+  grantedBy   String
+  createdAt   DateTime @default(now())
+
+  guild     RpgGuild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  vaga      VagaDefinition @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  character Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([vagaId, characterId, isExtra])
+  @@index([guildId, characterId])
+  @@index([vagaId])
+  @@map("vaga_occupants")
+}
+
+enum VagaHistoryAction {
+  GRANT
+  REVOKE
+  RESET
+  CLEAR
+}
+
+model VagaHistory {
+  id          String            @id @default(cuid())
+  guildId     String
+  vagaId      String
+  characterId String
+  actorId     String
+  action      VagaHistoryAction
+  isExtra     Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+
+  guild     RpgGuild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  vaga      VagaDefinition @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  character Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, vagaId, createdAt])
+  @@index([guildId, characterId, createdAt])
+  @@map("vaga_history")
 }
 
 model AuditLog {

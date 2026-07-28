@@ -11,6 +11,7 @@ import { periciaAdminCommand, periciasCommand } from "./pericias.js";
 import { setarCommand } from "./setar.js";
 import { setupCommand } from "./setup.js";
 import { paCommand, trainingCommand } from "./training.js";
+import { vagaCommand } from "./vagas.js";
 import { worldCommand } from "./world.js";
 
 export const commandRegistry = new CommandRegistry<CommandServices>();
@@ -32,7 +33,8 @@ for (const command of [
   duelCommand,
   combatAdminCommand,
   economyCommand,
-  economyAdminCommand
+  economyAdminCommand,
+  vagaCommand
 ]) {
   commandRegistry.register(command);
 }
