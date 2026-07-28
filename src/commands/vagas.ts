@@ -6,7 +6,7 @@ import { CharacterRuleError } from "../modules/characters/CharacterService.js";
 import { VagaRuleError, type VagaOccupantWithCharacter, type VagaWithRelations } from "../modules/vagas/VagaService.js";
 import { canUseCommandAccess } from "../services/permissions.js";
 import type { CommandServices } from "../types/command.js";
-import { buildVagaConfigView, buildVagaCreateHubView } from "./vagaMenu.js";
+import { buildVagaConfigView, buildVagaCreateHubView, listAvailableBonusKeys } from "./vagaMenu.js";
 import { BRAND_COLOR } from "./uiConstants.js";
 
 registerModule({
@@ -227,6 +227,7 @@ export const vagaCommand = defineCommandGroup<CommandServices>({
                 ? Object.entries(vaga.bonuses as Record<string, number>).map(([k, v]) => `${k}:${v}`).join(", ")
                 : "Nenhum"
             },
+            { name: "Chaves de bônus disponíveis", value: (await listAvailableBonusKeys(ctx.guild, ctx.services)).join(", ") || "Nenhuma" },
             { name: "Rank inicial", value: vaga.initialRank ? vaga.initialRank.name : "Nenhum", inline: true },
             { name: "Restrição de vila", value: vaga.villageRestriction ? vaga.villageRestriction.name : "Nenhuma", inline: true },
             {

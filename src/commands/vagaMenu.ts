@@ -257,7 +257,21 @@ function buildSearchModal(page: number, query: string): ModalBuilder {
 
 // ─── Detalhe / edição ─────────────────────────────────────────────────────────
 
-function buildVagaDetailView(vaga: VagaWithRelations, officialCount: number): VagaMenuView {
+/** Chaves aceitas no campo de bônus (de vaga, clã, vila, rank...): os atributos ativos do
+ * servidor + "chakra" (bônus especial somado direto ao chakra calculado, sem ser um atributo). */
+export async function listAvailableBonusKeys(guild: Guild, services: CommandServices): Promise<string[]> {
+  const attributes = await services.attributes.listAttributes(guild);
+  return [...attributes.map((attr) => attr.key), "chakra"];
+}
+
+async function buildVagaDetailView(
+  guild: Guild,
+  services: CommandServices,
+  vaga: VagaWithRelations,
+  officialCount: number
+): Promise<VagaMenuView> {
+  const bonusKeys = await listAvailableBonusKeys(guild, services);
+
   const embed = new EmbedBuilder()
     .setColor(BRAND_COLOR)
     .setTitle(`🎫 ${vaga.name} \`[${vaga.key}]\``)
@@ -267,6 +281,7 @@ function buildVagaDetailView(vaga: VagaWithRelations, officialCount: number): Va
       { name: "Status", value: vaga.isActive ? "🟢 Ativa" : "🔴 Inativa", inline: true },
       { name: "Ocupação", value: occupancyLabel(vaga, officialCount), inline: true },
       { name: "Bônus", value: formatBonuses(vaga.bonuses) || "Nenhum" },
+      { name: "Chaves de bônus disponíveis", value: bonusKeys.length ? bonusKeys.join(", ") : "Nenhuma (cadastre atributos em `.atributo config`)." },
       { name: "Rank inicial", value: vaga.initialRank?.name ?? "Nenhum", inline: true },
       { name: "Restrição de vila", value: vaga.villageRestriction?.name ?? "Nenhuma", inline: true },
       { name: "Jutsus iniciais", value: vaga.initialJutsus.length ? vaga.initialJutsus.map((j) => j.name).join(", ") : "Nenhum" }
@@ -509,11 +524,11 @@ async function updateOrFallback(interaction: ComponentMenuInteraction, view: Vag
   await interaction.update(view);
 }
 
-async function getDetailView(services: CommandServices, vagaId: string): Promise<VagaMenuView | null> {
+async function getDetailView(guild: Guild, services: CommandServices, vagaId: string): Promise<VagaMenuView | null> {
   const vaga = await services.vagas.getVagaById(vagaId);
   if (!vaga) return null;
   const officialCount = await services.vagas.countOfficialOccupants(vaga.id);
-  return buildVagaDetailView(vaga, officialCount);
+  return buildVagaDetailView(guild, services, vaga, officialCount);
 }
 
 export async function handleVagaMenuInteraction(interaction: MenuInteraction, services: CommandServices): Promise<void> {
@@ -631,7 +646,7 @@ async function routeComponent(
       if (!interaction.isStringSelectMenu()) return;
       const vagaId = interaction.values[0];
       if (!vagaId) return;
-      await updateOrFallback(interaction, await getDetailView(services, vagaId));
+      await updateOrFallback(interaction, await getDetailView(guild, services, vagaId));
       return;
     }
 
@@ -671,7 +686,7 @@ async function routeComponent(
 
     case "backToDetail": {
       if (!interaction.isButton()) return;
-      await updateOrFallback(interaction, await getDetailView(services, parts[0] ?? ""));
+      await updateOrFallback(interaction, await getDetailView(guild, services, parts[0] ?? ""));
       return;
     }
 
@@ -729,7 +744,7 @@ async function routeComponent(
 
     case "jutsuDone": {
       if (!interaction.isButton()) return;
-      await updateOrFallback(interaction, await getDetailView(services, parts[0] ?? ""));
+      await updateOrFallback(interaction, await getDetailView(guild, services, parts[0] ?? ""));
       return;
     }
 
@@ -759,7 +774,7 @@ async function routeComponent(
 
     case "linkDone": {
       if (!interaction.isButton()) return;
-      await updateOrFallback(interaction, await getDetailView(services, parts[0] ?? ""));
+      await updateOrFallback(interaction, await getDetailView(guild, services, parts[0] ?? ""));
       return;
     }
 
@@ -800,7 +815,7 @@ async function handleCreateModalSubmit(
     description: descricaoRaw.length > 0 ? descricaoRaw : undefined
   });
 
-  await interaction.editReply(buildVagaDetailView(created, 0));
+  await interaction.editReply(await buildVagaDetailView(interaction.guild, services, created, 0));
 }
 
 async function handleCategoryLimitModalSubmit(
@@ -855,7 +870,7 @@ async function handleBasicEditModalSubmit(
   }
 
   const officialCount = await services.vagas.countOfficialOccupants(updated.id);
-  await interaction.editReply(buildVagaDetailView(updated, officialCount));
+  await interaction.editReply(await buildVagaDetailView(interaction.guild, services, updated, officialCount));
 }
 
 async function handleToggleActive(interaction: ComponentMenuInteraction, services: CommandServices, vagaId?: string): Promise<void> {
@@ -870,7 +885,9 @@ async function handleToggleActive(interaction: ComponentMenuInteraction, service
 
   const updated = await services.vagas.updateVaga(interaction.guild, interaction.user.id, vaga.key, { isActive: !vaga.isActive });
   const officialCount = updated ? await services.vagas.countOfficialOccupants(updated.id) : 0;
-  await interaction.editReply(updated ? buildVagaDetailView(updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, ""));
+  await interaction.editReply(
+    updated ? await buildVagaDetailView(interaction.guild, services, updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, "")
+  );
 }
 
 async function handleRemoveVaga(interaction: ComponentMenuInteraction, services: CommandServices, vagaId?: string): Promise<void> {
@@ -898,7 +915,9 @@ async function handlePickRank(interaction: StringSelectMenuInteraction<"cached">
 
   const updated = await services.vagas.setInitialRank(interaction.guild, interaction.user.id, vaga.key, value === NONE_VALUE ? null : value ?? null);
   const officialCount = updated ? await services.vagas.countOfficialOccupants(updated.id) : 0;
-  await interaction.editReply(updated ? buildVagaDetailView(updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, ""));
+  await interaction.editReply(
+    updated ? await buildVagaDetailView(interaction.guild, services, updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, "")
+  );
 }
 
 async function handlePickVillage(interaction: StringSelectMenuInteraction<"cached">, services: CommandServices, vagaId?: string): Promise<void> {
@@ -919,7 +938,9 @@ async function handlePickVillage(interaction: StringSelectMenuInteraction<"cache
     value === NONE_VALUE ? null : value ?? null
   );
   const officialCount = updated ? await services.vagas.countOfficialOccupants(updated.id) : 0;
-  await interaction.editReply(updated ? buildVagaDetailView(updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, ""));
+  await interaction.editReply(
+    updated ? await buildVagaDetailView(interaction.guild, services, updated, officialCount) : await buildVagaSelectorView(interaction.guild, services, 0, "")
+  );
 }
 
 async function handlePickJutsuPage(
